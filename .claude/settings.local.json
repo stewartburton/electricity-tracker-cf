@@ -10,7 +10,12 @@
       "Read(//d/Dev/Repos/**)",
       "Bash(git init:*)",
       "WebFetch(domain:github.com)",
-      "Read(//c/Users/stewa/OneDrive/Pictures/Screenpresso/**)"
+      "Read(//c/Users/stewa/OneDrive/Pictures/Screenpresso/**)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:electricity-tracker.electricity-monitor.workers.dev)",
+      "Bash(npx wrangler:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

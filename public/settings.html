@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Settings - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">📊 Dashboard</a>
+            <a href="/reading" class="nav-btn">📈 Meter Reading</a>
+            <a href="/voucher" class="nav-btn">💳 Vouchers</a>
+            <a href="/history" class="nav-btn">📋 History</a>
+            <a href="/settings" class="nav-btn active">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        <div class="page-header">
+            <h1>⚙️ Account Settings</h1>
+            <p class="page-subtitle">Manage your account and linked households</p>
+        </div>
+
+        <!-- Account Information -->
+        <div class="card" id="accountInfoCard">
+            <h2>👤 Account Information</h2>
+            <div id="accountInfoContent">
+                <div style="text-align: center; color: #666; padding: 20px;">
+                    Loading account information...
+                </div>
+            </div>
+        </div>
+
+        <!-- Password Change Section -->
+        <div class="card">
+            <h2>🔐 Change Password</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Update your account password for security.
+            </p>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label for="currentPassword">Current Password:</label>
+                    <input type="password" id="currentPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password:</label>
+                    <input type="password" id="newPassword" minlength="6" required>
+                    <small>Must be at least 6 characters long</small>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm New Password:</label>
+                    <input type="password" id="confirmPassword" minlength="6" required>
+                </div>
+                <button type="submit" class="primary-btn">🔐 Change Password</button>
+            </form>
+        </div>
+
+        <!-- Account Linking Section -->
+        <div class="card">
+            <h2>🏠 Household Account Linking</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Link your account with family members or housemates to share electricity data. 
+                Everyone in the household will see the same vouchers, readings, and statistics.
+            </p>
+
+            <div id="groupSection">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Create Group Section -->
+        <div class="card" id="createGroupSection" style="display: none;">
+            <h3>🆕 Create New Household Group</h3>
+            <form id="createGroupForm">
+                <div class="form-group">
+                    <label for="groupName">Group Name:</label>
+                    <input type="text" id="groupName" placeholder="e.g., Smith Family, Apartment 4B" required>
+                    <small>Enter a name for your household group</small>
+                </div>
+                <button type="submit" class="primary-btn">Create Group</button>
+            </form>
+        </div>
+
+        <!-- Join Group Section -->
+        <div class="card" id="joinGroupSection" style="display: none;">
+            <h3>🔗 Join Existing Group</h3>
+            <form id="joinGroupForm">
+                <div class="form-group">
+                    <label for="inviteCode">Invite Code:</label>
+                    <input type="text" id="inviteCode" placeholder="e.g., ABCD-EFGH-2024" required>
+                    <small>Enter the invite code shared by a group member</small>
+                </div>
+                <button type="submit" class="primary-btn">Join Group</button>
+            </form>
+        </div>
+
+        <!-- Group Management -->
+        <div class="card" id="groupManagementSection" style="display: none;">
+            <div id="groupManagementContent">
+                <!-- Content populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const ET = window.ElectricityTracker;
+            
+            if (!ET) {
+                alert('Application failed to load. Please refresh the page.');
+                return;
+            }
+
+            // Check authentication
+            if (!ET.auth.checkAuth()) return;
+
+            let accountData = null;
+
+            // Load account information
+            async function loadAccountInfo() {
+                try {
+                    const data = await ET.api.get('/api/account/info');
+                    if (data && data.success) {
+                        accountData = data.data;
+                        displayAccountInfo();
+                        displayGroupStatus();
+                    }
+                } catch (error) {
+                    console.error('Failed to load account info:', error);
+                    alert('Failed to load account information');
+                }
+            }
+
+            function displayAccountInfo() {
+                const content = document.getElementById('accountInfoContent');
+                content.innerHTML = `
+                    <div class="form-group">
+                        <label>Email Address:</label>
+                        <input type="email" value="${accountData.user.email}" readonly style="background: #f5f5f5;">
+                    </div>
+                    <div class="form-group">
+                        <label>Account Created:</label>
+                        <input type="text" value="${new Date(accountData.user.created_at).toLocaleDateString()}" readonly style="background: #f5f5f5;">
+                    </div>
+                `;
+            }
+
+            function displayGroupStatus() {
+                const groupSection = document.getElementById('groupSection');
+                const createSection = document.getElementById('createGroupSection');
+                const joinSection = document.getElementById('joinGroupSection');
+                const managementSection = document.getElementById('groupManagementSection');
+
+                if (accountData.group) {
+                    // User is in a group
+                    groupSection.innerHTML = `
+                        <div class="stat-card" style="border-left: 4px solid #28a745; margin-bottom: 20px;">
+                            <div class="stat-content">
+                                <h3>✅ Linked to: ${accountData.group.name}</h3>
+                                <p>Role: <strong>${accountData.group.role.charAt(0).toUpperCase() + accountData.group.role.slice(1)}</strong></p>
+                                <p>Joined: ${new Date(accountData.group.joined_at).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    `;
+
+                    // Show group management
+                    managementSection.style.display = 'block';
+                    displayGroupManagement();
+                    
+                    createSection.style.display = 'none';
+                    joinSection.style.display = 'none';
+                } else {
+                    // User is not in a group
+                    groupSection.innerHTML = `
+                        <div class="stat-card" style="border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                            <div class="stat-content">
+                                <h3>⚠️ No Household Group</h3>
+                                <p>You are not currently linked to any household group.</p>
+                                <p>Create a new group or join an existing one to share electricity data.</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button class="primary-btn" onclick="showCreateGroup()">🆕 Create Group</button>
+                            <button class="secondary-btn" onclick="showJoinGroup()">🔗 Join Group</button>
+                        </div>
+                    `;
+                    
+                    managementSection.style.display = 'none';
+                }
+            }
+
+            function displayGroupManagement() {
+                const content = document.getElementById('groupManagementContent');
+                let html = `
+                    <h3>👥 Group: ${accountData.group.name}</h3>
+                `;
+
+                if (accountData.group.role === 'owner') {
+                    html += `
+                        <div class="form-group">
+                            <label>Invite Code (Share this with family members):</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" value="${accountData.group.invite_code}" readonly style="background: #f0f8ff;" id="inviteCodeInput">
+                                <button type="button" class="secondary-btn" onclick="copyInviteCode()">📋 Copy</button>
+                            </div>
+                            <small>Share this code with family members so they can join your group</small>
+                        </div>
+                    `;
+                }
+
+                // Show linked accounts
+                if (accountData.linkedAccounts.length > 0) {
+                    html += `
+                        <h4>🔗 Linked Accounts:</h4>
+                        <div class="recent-list">
+                    `;
+                    accountData.linkedAccounts.forEach(account => {
+                        html += `
+                            <div class="recent-item">
+                                <span>📧 ${account.email}</span>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <small>${account.role.charAt(0).toUpperCase() + account.role.slice(1)}</small>
+                                    <small>${new Date(account.joined_at).toLocaleDateString()}</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `
+                        <div class="stat-card" style="border-left: 4px solid #17a2b8;">
+                            <div class="stat-content">
+                                <h4>👤 Only You in Group</h4>
+                                <p>No other accounts are linked yet. Share your invite code to add family members.</p>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <button class="secondary-btn" onclick="leaveGroup()" style="background: #dc3545; color: white;">
+                            🚪 Leave Group
+                        </button>
+                    </div>
+                `;
+
+                content.innerHTML = html;
+            }
+
+            // Global functions
+            window.showCreateGroup = function() {
+                document.getElementById('createGroupSection').style.display = 'block';
+                document.getElementById('joinGroupSection').style.display = 'none';
+            };
+
+            window.showJoinGroup = function() {
+                document.getElementById('createGroupSection').style.display = 'none';
+                document.getElementById('joinGroupSection').style.display = 'block';
+            };
+
+            window.copyInviteCode = function() {
+                const input = document.getElementById('inviteCodeInput');
+                input.select();
+                document.execCommand('copy');
+                alert('Invite code copied to clipboard!');
+            };
+
+            window.leaveGroup = async function() {
+                if (confirm('Are you sure you want to leave this group? This action cannot be undone.')) {
+                    try {
+                        const data = await ET.api.post('/api/account/leave-group', {});
+                        if (data && data.success) {
+                            alert('Successfully left the group');
+                            loadAccountInfo(); // Reload
+                        }
+                    } catch (error) {
+                        console.error('Leave group error:', error);
+                        alert(error.message || 'Failed to leave group');
+                    }
+                }
+            };
+
+            // Form handlers
+            document.getElementById('createGroupForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('groupName').value;
+
+                try {
+                    const data = await ET.api.post('/api/account/create-group', { name });
+                    if (data && data.success) {
+                        alert('Group created successfully!');
+                        loadAccountInfo(); // Reload
+                    }
+                } catch (error) {
+                    console.error('Create group error:', error);
+                    alert(error.message || 'Failed to create group');
+                }
+            });
+
+            document.getElementById('joinGroupForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const inviteCode = document.getElementById('inviteCode').value;
+
+                try {
+                    const data = await ET.api.post('/api/account/join-group', { inviteCode });
+                    if (data && data.success) {
+                        alert(`Successfully joined "${data.data.name}"!`);
+                        loadAccountInfo(); // Reload
+                    }
+                } catch (error) {
+                    console.error('Join group error:', error);
+                    alert(error.message || 'Failed to join group');
+                }
+            });
+
+            // Password change form handler
+            document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                // Client-side validation
+                if (newPassword !== confirmPassword) {
+                    alert('New passwords do not match');
+                    return;
+                }
+
+                if (newPassword.length < 6) {
+                    alert('New password must be at least 6 characters long');
+                    return;
+                }
+
+                try {
+                    const data = await ET.api.post('/api/account/change-password', {
+                        currentPassword,
+                        newPassword
+                    });
+                    
+                    if (data && data.success) {
+                        alert('Password changed successfully!');
+                        // Clear the form
+                        document.getElementById('changePasswordForm').reset();
+                    }
+                } catch (error) {
+                    console.error('Change password error:', error);
+                    alert(error.message || 'Failed to change password');
+                }
+            });
+
+            // Load initial data
+            loadAccountInfo();
+        });
+    </script>
+</body>
+</html>

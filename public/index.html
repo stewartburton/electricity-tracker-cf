@@ -49,57 +49,104 @@
     <script src="/api-config.js"></script>
     <script src="/js/app.js"></script>
     <script>
-        const ET = window.ElectricityTracker;
-        
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+        document.addEventListener('DOMContentLoaded', function() {
+            const ET = window.ElectricityTracker;
             
-            try {
-                const data = await ET.api.post('/api/auth/login', { email, password });
-                if (data) {
-                    ET.auth.setToken(data.token);
-                    ET.auth.setUser(data.user);
-                    window.location.href = '/dashboard';
-                }
-            } catch (error) {
-                alert(error.message || 'Login failed');
+            if (!ET) {
+                console.error('ElectricityTracker not found!');
+                alert('Application failed to load. Please refresh the page.');
+                return;
             }
-        });
-        
-        document.getElementById('registerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('regEmail').value;
-            const password = document.getElementById('regPassword').value;
-            const registrationKey = document.getElementById('registrationKey').value;
             
-            try {
-                const data = await ET.api.post('/api/auth/register', { 
-                    email, 
-                    password, 
-                    registrationKey 
+            console.log('ElectricityTracker loaded:', ET);
+            
+            const loginForm = document.getElementById('loginForm');
+            if (!loginForm) {
+                console.error('Login form not found!');
+                return;
+            }
+            
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                console.log('Login form submitted');
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                console.log('Login attempt for:', email);
+                
+                if (!email || !password) {
+                    alert('Please enter both email and password');
+                    return;
+                }
+                
+                try {
+                    console.log('Making API call...');
+                    const data = await ET.api.post('/api/auth/login', { email, password });
+                    console.log('API response:', data);
+                    
+                    if (data && data.success) {
+                        console.log('Login successful, setting token and redirecting...');
+                        ET.auth.setToken(data.token);
+                        ET.auth.setUser(data.user);
+                        window.location.href = '/dashboard';
+                    } else {
+                        alert('Login failed: ' + (data?.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    alert(error.message || 'Login failed');
+                }
+            });
+            
+            // Registration form handler
+            const registerForm = document.getElementById('registerForm');
+            if (registerForm) {
+                registerForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = document.getElementById('regEmail').value;
+                    const password = document.getElementById('regPassword').value;
+                    const registrationKey = document.getElementById('registrationKey').value;
+                    
+                    try {
+                        const data = await ET.api.post('/api/auth/register', { 
+                            email, 
+                            password, 
+                            registrationKey 
+                        });
+                        if (data && data.success) {
+                            ET.auth.setToken(data.token);
+                            ET.auth.setUser(data.user);
+                            window.location.href = '/dashboard';
+                        } else {
+                            alert('Registration failed: ' + (data?.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Registration error:', error);
+                        alert(error.message || 'Registration failed');
+                    }
                 });
-                if (data) {
-                    ET.auth.setToken(data.token);
-                    ET.auth.setUser(data.user);
-                    window.location.href = '/dashboard';
-                }
-            } catch (error) {
-                alert(error.message || 'Registration failed');
             }
-        });
-        
-        document.getElementById('showRegister').addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'block';
-        });
-        
-        document.getElementById('showLogin').addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
+            
+            // Form switching handlers
+            const showRegisterBtn = document.getElementById('showRegister');
+            const showLoginBtn = document.getElementById('showLogin');
+            
+            if (showRegisterBtn) {
+                showRegisterBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('registerForm').style.display = 'block';
+                });
+            }
+            
+            if (showLoginBtn) {
+                showLoginBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    document.getElementById('registerForm').style.display = 'none';
+                    document.getElementById('loginForm').style.display = 'block';
+                });
+            }
         });
     </script>
 </body>

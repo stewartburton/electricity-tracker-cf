@@ -1,16 +1,13 @@
 name = "electricity-tracker"
-main = "src/index.js"
-compatibility_date = "2024-09-01"
+main = "index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 account_id = "ea0f3f2a36d3e89033f96519ad115af1"
+
+[assets]
+directory = "./public"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "electricity-tracker-db"
 database_id = "fbcc393d-4801-4fd1-a090-5dca1fa3ee92"
-
-[site]
-bucket = "./public"
-
-[build]
-command = ""
-watch_paths = ["src", "public"]
