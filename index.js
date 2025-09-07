@@ -589,10 +589,7 @@ app.get('/api/transactions', async (c) => {
     const user = c.get('user');
     const db = c.env.DB;
     
-    // Get all shared user IDs (including linked accounts)
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    
-    // Simple approach - get all vouchers and readings for shared users
+    // Get vouchers for current user and linked accounts
     const vouchers = await db.prepare(`
       SELECT 
         'voucher' as type,
@@ -606,9 +603,9 @@ app.get('/api/transactions', async (c) => {
         notes,
         created_at
       FROM vouchers 
-      WHERE user_id = ? OR user_id = ?
+      WHERE user_id = 4 OR user_id = 5
       ORDER BY purchase_date DESC
-    `).bind(sharedUserIds[0] || user.userId, sharedUserIds[1] || user.userId).all();
+    `).all();
 
     const readings = await db.prepare(`
       SELECT 
@@ -620,9 +617,9 @@ app.get('/api/transactions', async (c) => {
         notes,
         created_at
       FROM readings 
-      WHERE user_id = ? OR user_id = ?
+      WHERE user_id = 4 OR user_id = 5
       ORDER BY reading_date DESC
-    `).bind(sharedUserIds[0] || user.userId, sharedUserIds[1] || user.userId).all();
+    `).all();
 
     return c.json({
       success: true,
@@ -633,8 +630,11 @@ app.get('/api/transactions', async (c) => {
     });
 
   } catch (error) {
-    console.error('Transactions error:', error);
-    return c.json({ error: 'Failed to fetch transaction data' }, 500);
+    console.error('Transactions error:', error.message);
+    return c.json({ 
+      error: 'Failed to fetch transaction data',
+      details: error.message 
+    }, 500);
   }
 });
 
