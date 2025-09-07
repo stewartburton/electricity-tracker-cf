@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/voucher">Add Voucher</a>
+        <a href="/reading">Add Reading</a>
+        <a href="/history">History</a>
+        <a href="#" id="logout">Logout</a>
+    </nav>
+    
+    <div class="container">
+        <h1>Dashboard</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Vouchers</h3>
+                <p id="totalVouchers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Total Amount</h3>
+                <p id="totalAmount">R0.00</p>
+            </div>
+            <div class="stat-card">
+                <h3>Total Units</h3>
+                <p id="totalUnits">0 kWh</p>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Cost/kWh</h3>
+                <p id="avgCost">R0.00</p>
+            </div>
+        </div>
+        
+        <div class="recent-section">
+            <h2>Recent Vouchers</h2>
+            <div id="recentVouchers">Loading...</div>
+        </div>
+        
+        <div class="recent-section">
+            <h2>Recent Readings</h2>
+            <div id="recentReadings">Loading...</div>
+        </div>
+    </div>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        // Use the ElectricityTracker namespace - no duplicate declarations
+        const ET = window.ElectricityTracker;
+        
+        // Check authentication
+        if (!ET.auth.checkAuth()) {
+            // User will be redirected to login
+        } else {
+            loadDashboard();
+        }
+        
+        async function loadDashboard() {
+            try {
+                ET.utils.showLoading(true);
+                
+                const data = await ET.api.get('/api/dashboard');
+                
+                if (data) {
+                    // Update stats
+                    document.getElementById('totalVouchers').textContent = data.totalVouchers || 0;
+                    document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
+                    document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(2)} kWh`;
+                    document.getElementById('avgCost').textContent = ET.utils.formatCurrency(data.avgCostPerKwh);
+                    
+                    // Display recent vouchers
+                    if (data.recentVouchers && data.recentVouchers.length > 0) {
+                        const vouchersHtml = data.recentVouchers.map(v => `
+                            <div class="item">
+                                <span>${ET.utils.formatDate(v.purchase_date)}</span>
+                                <span>${ET.utils.formatCurrency(v.rand_amount)} - ${v.kwh_amount} kWh</span>
+                            </div>
+                        `).join('');
+                        document.getElementById('recentVouchers').innerHTML = vouchersHtml;
+                    } else {
+                        document.getElementById('recentVouchers').innerHTML = '<p>No vouchers yet</p>';
+                    }
+                    
+                    // Display recent readings
+                    if (data.recentReadings && data.recentReadings.length > 0) {
+                        const readingsHtml = data.recentReadings.map(r => `
+                            <div class="item">
+                                <span>${ET.utils.formatDate(r.reading_date)}</span>
+                                <span>${r.reading_value} kWh</span>
+                            </div>
+                        `).join('');
+                        document.getElementById('recentReadings').innerHTML = readingsHtml;
+                    } else {
+                        document.getElementById('recentReadings').innerHTML = '<p>No readings yet</p>';
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                ET.utils.showMessage('Failed to load dashboard data', 'error');
+            } finally {
+                ET.utils.showLoading(false);
+            }
+        }
+    </script>
+</body>
+</html>

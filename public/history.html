@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/voucher">Add Voucher</a>
+        <a href="/reading">Add Reading</a>
+        <a href="/history" class="active">History</a>
+        <a href="#" id="logout">Logout</a>
+    </nav>
+    
+    <div class="container">
+        <h1>Transaction History</h1>
+        
+        <!-- Filters -->
+        <div class="filters card">
+            <div class="filter-group">
+                <label for="monthFilter">Filter by Month:</label>
+                <input type="month" id="monthFilter">
+                <button id="filterBtn" class="secondary-btn">Apply Filter</button>
+                <button id="clearFilterBtn" class="secondary-btn">Clear</button>
+            </div>
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" id="showVouchers" checked> Show Vouchers
+                </label>
+                <label>
+                    <input type="checkbox" id="showReadings" checked> Show Readings
+                </label>
+            </div>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats-summary card">
+            <h2>Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Total Vouchers:</span>
+                    <span id="totalVoucherCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Spent:</span>
+                    <span id="totalSpent">R0.00</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Units:</span>
+                    <span id="totalUnits">0 kWh</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Readings:</span>
+                    <span id="totalReadingCount">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Transaction List -->
+        <div class="transactions-section">
+            <h2>All Transactions</h2>
+            <div id="transactionsList">Loading...</div>
+        </div>
+    </div>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+        let allVouchers = [];
+        let allReadings = [];
+        
+        // Check authentication
+        if (!ET.auth.checkAuth()) {
+            // User will be redirected to login
+        } else {
+            loadTransactions();
+            setupFilters();
+        }
+        
+        function setupFilters() {
+            // Set current month as default
+            const now = new Date();
+            const currentMonth = now.toISOString().slice(0, 7);
+            document.getElementById('monthFilter').value = currentMonth;
+            
+            // Filter button
+            document.getElementById('filterBtn').addEventListener('click', () => {
+                loadTransactions();
+            });
+            
+            // Clear filter
+            document.getElementById('clearFilterBtn').addEventListener('click', () => {
+                document.getElementById('monthFilter').value = '';
+                loadTransactions();
+            });
+            
+            // Checkboxes
+            document.getElementById('showVouchers').addEventListener('change', renderTransactions);
+            document.getElementById('showReadings').addEventListener('change', renderTransactions);
+        }
+        
+        async function loadTransactions() {
+            try {
+                const month = document.getElementById('monthFilter').value;
+                const endpoint = month ? `/api/transactions?month=${month}` : '/api/transactions';
+                
+                const data = await ET.api.get(endpoint);
+                
+                if (data) {
+                    allVouchers = data.vouchers || [];
+                    allReadings = data.readings || [];
+                    
+                    updateSummary();
+                    renderTransactions();
+                }
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+                document.getElementById('transactionsList').innerHTML = '<p>Error loading transactions</p>';
+            }
+        }
+        
+        function updateSummary() {
+            const totalSpent = allVouchers.reduce((sum, v) => sum + (v.rand_amount || 0), 0);
+            const totalUnits = allVouchers.reduce((sum, v) => sum + (v.kwh_amount || 0), 0);
+            
+            document.getElementById('totalVoucherCount').textContent = allVouchers.length;
+            document.getElementById('totalSpent').textContent = ET.utils.formatCurrency(totalSpent);
+            document.getElementById('totalUnits').textContent = `${totalUnits.toFixed(2)} kWh`;
+            document.getElementById('totalReadingCount').textContent = allReadings.length;
+        }
+        
+        function renderTransactions() {
+            const showVouchers = document.getElementById('showVouchers').checked;
+            const showReadings = document.getElementById('showReadings').checked;
+            
+            let transactions = [];
+            
+            // Add vouchers
+            if (showVouchers) {
+                transactions.push(...allVouchers.map(v => ({
+                    ...v,
+                    type: 'voucher',
+                    date: v.purchase_date,
+                    sortDate: new Date(v.purchase_date)
+                })));
+            }
+            
+            // Add readings
+            if (showReadings) {
+                transactions.push(...allReadings.map(r => ({
+                    ...r,
+                    type: 'reading',
+                    date: r.reading_date,
+                    sortDate: new Date(r.reading_date)
+                })));
+            }
+            
+            // Sort by date (newest first)
+            transactions.sort((a, b) => b.sortDate - a.sortDate);
+            
+            if (transactions.length === 0) {
+                document.getElementById('transactionsList').innerHTML = '<p>No transactions found</p>';
+                return;
+            }
+            
+            const html = transactions.map(t => {
+                if (t.type === 'voucher') {
+                    return `
+                        <div class="transaction-item voucher-type">
+                            <div class="transaction-icon">💰</div>
+                            <div class="transaction-content">
+                                <div class="transaction-header">
+                                    <span class="transaction-type">Voucher Purchase</span>
+                                    <span class="transaction-date">${ET.utils.formatDateTime(t.date)}</span>
+                                </div>
+                                <div class="transaction-details">
+                                    <span>Amount: ${ET.utils.formatCurrency(t.rand_amount)}</span>
+                                    <span>Units: ${t.kwh_amount} kWh</span>
+                                    <span>Token: ${t.token_number}</span>
+                                    ${t.vat_amount ? `<span>VAT: ${ET.utils.formatCurrency(t.vat_amount)}</span>` : ''}
+                                </div>
+                                ${t.notes ? `<div class="transaction-notes">${t.notes}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="transaction-item reading-type">
+                            <div class="transaction-icon">📊</div>
+                            <div class="transaction-content">
+                                <div class="transaction-header">
+                                    <span class="transaction-type">Meter Reading</span>
+                                    <span class="transaction-date">${ET.utils.formatDateTime(t.date)}</span>
+                                </div>
+                                <div class="transaction-details">
+                                    <span>Reading: ${t.reading_value} kWh</span>
+                                </div>
+                                ${t.notes ? `<div class="transaction-notes">${t.notes}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+            
+            document.getElementById('transactionsList').innerHTML = html;
+        }
+    </script>
+</body>
+</html>

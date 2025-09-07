@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Reading - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/voucher">Add Voucher</a>
+        <a href="/reading" class="active">Add Reading</a>
+        <a href="/history">History</a>
+        <a href="#" id="logout">Logout</a>
+    </nav>
+    
+    <div class="container">
+        <h1>Add Meter Reading</h1>
+        
+        <form id="readingForm" class="card">
+            <h2>Record Meter Reading</h2>
+            
+            <div class="form-group">
+                <label for="reading_value">Reading Value (kWh)</label>
+                <input type="number" id="reading_value" name="reading_value" step="0.01" required>
+                <small>Enter the current value shown on your meter</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="reading_date">Reading Date & Time</label>
+                <input type="datetime-local" id="reading_date" name="reading_date">
+            </div>
+            
+            <div class="form-group">
+                <label for="notes">Notes (Optional)</label>
+                <textarea id="notes" name="notes" rows="3" placeholder="Any observations or comments..."></textarea>
+            </div>
+            
+            <button type="submit" class="primary-btn">Save Reading</button>
+        </form>
+        
+        <!-- Recent Readings -->
+        <div class="recent-section">
+            <h2>Recent Readings</h2>
+            <div id="recentReadings">Loading...</div>
+        </div>
+    </div>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+        
+        // Check authentication
+        if (!ET.auth.checkAuth()) {
+            // User will be redirected to login
+        } else {
+            loadRecentReadings();
+            setDefaultDateTime();
+        }
+        
+        // Set default date/time to now
+        function setDefaultDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('reading_date').value = now.toISOString().slice(0, 16);
+        }
+        
+        // Handle form submission
+        document.getElementById('readingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                reading_value: parseFloat(document.getElementById('reading_value').value),
+                reading_date: document.getElementById('reading_date').value,
+                notes: document.getElementById('notes').value
+            };
+            
+            try {
+                const result = await ET.api.post('/api/readings', formData);
+                
+                if (result) {
+                    alert('Reading saved successfully!');
+                    document.getElementById('readingForm').reset();
+                    setDefaultDateTime();
+                    loadRecentReadings();
+                }
+            } catch (error) {
+                alert('Error saving reading: ' + error.message);
+            }
+        });
+        
+        // Load recent readings
+        async function loadRecentReadings() {
+            try {
+                const readings = await ET.api.get('/api/readings?limit=10');
+                
+                if (readings && readings.length > 0) {
+                    const html = readings.slice(0, 10).map(r => {
+                        const date = new Date(r.reading_date);
+                        let consumption = '';
+                        
+                        // Calculate consumption if there's a previous reading
+                        const currentIndex = readings.indexOf(r);
+                        if (currentIndex < readings.length - 1) {
+                            const prevReading = readings[currentIndex + 1];
+                            const consumed = r.reading_value - prevReading.reading_value;
+                            if (consumed > 0) {
+                                consumption = `<span class="consumption">Used: ${consumed.toFixed(2)} kWh</span>`;
+                            }
+                        }
+                        
+                        return `
+                            <div class="reading-item">
+                                <div class="reading-header">
+                                    <span class="date">${ET.utils.formatDateTime(r.reading_date)}</span>
+                                    <span class="value">${r.reading_value.toFixed(2)} kWh</span>
+                                </div>
+                                ${consumption}
+                                ${r.notes ? `<div class="reading-notes">${r.notes}</div>` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    document.getElementById('recentReadings').innerHTML = html;
+                } else {
+                    document.getElementById('recentReadings').innerHTML = '<p>No readings yet. Add your first meter reading above!</p>';
+                }
+            } catch (error) {
+                console.error('Error loading readings:', error);
+                document.getElementById('recentReadings').innerHTML = '<p>Error loading readings</p>';
+            }
+        }
+    </script>
+</body>
+</html>
