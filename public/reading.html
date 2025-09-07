@@ -8,37 +8,53 @@
 </head>
 <body>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/voucher">Add Voucher</a>
-        <a href="/reading" class="active">Add Reading</a>
-        <a href="/history">History</a>
-        <a href="#" id="logout">Logout</a>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn active">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
     </nav>
     
-    <div class="container">
-        <h1>Add Meter Reading</h1>
+    <div class="page-container">
+        <div class="page-header">
+            <h1>📊 New Meter Reading</h1>
+            <p class="page-subtitle">Record your current electricity meter reading</p>
+        </div>
         
-        <form id="readingForm" class="card">
-            <h2>Record Meter Reading</h2>
+        <div class="reading-form-container">
+            <form id="readingForm" class="reading-form">
+                <div class="form-icon">⚡</div>
+                <h2>New Meter Reading</h2>
+                
+                <div class="form-group">
+                    <label for="reading_value">⚡ Current Reading (kWh)</label>
+                    <input type="number" id="reading_value" name="reading_value" step="0.01" placeholder="0000.00" required>
+                    <small>Enter the exact reading from your electricity meter as shown on your meter display.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reading_date">🕒 Date & Time</label>
+                    <input type="datetime-local" id="reading_date" name="reading_date">
+                    <small>When was this reading taken?</small>
+                </div>
+                
+                <button type="submit" class="primary-btn">📊 Save Reading</button>
+            </form>
             
-            <div class="form-group">
-                <label for="reading_value">Reading Value (kWh)</label>
-                <input type="number" id="reading_value" name="reading_value" step="0.01" required>
-                <small>Enter the current value shown on your meter</small>
+            <div class="reading-tips">
+                <h3>💡 Tips for Accurate Readings</h3>
+                <ul>
+                    <li>🕒 Always read the meter at the same time of day when possible</li>
+                    <li>🔍 Make sure to read all digits including decimal places</li>
+                    <li>📷 Take a photo of your meter for reference</li>
+                    <li>📊 Regular readings help track your consumption patterns</li>
+                    <li>⚠️ Check that the reading is higher than your previous reading</li>
+                </ul>
             </div>
-            
-            <div class="form-group">
-                <label for="reading_date">Reading Date & Time</label>
-                <input type="datetime-local" id="reading_date" name="reading_date">
-            </div>
-            
-            <div class="form-group">
-                <label for="notes">Notes (Optional)</label>
-                <textarea id="notes" name="notes" rows="3" placeholder="Any observations or comments..."></textarea>
-            </div>
-            
-            <button type="submit" class="primary-btn">Save Reading</button>
-        </form>
+        </div>
         
         <!-- Recent Readings -->
         <div class="recent-section">

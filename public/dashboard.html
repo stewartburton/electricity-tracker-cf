@@ -8,43 +8,125 @@
 </head>
 <body>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/voucher">Add Voucher</a>
-        <a href="/reading">Add Reading</a>
-        <a href="/history">History</a>
-        <a href="#" id="logout">Logout</a>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
     </nav>
     
-    <div class="container">
-        <h1>Dashboard</h1>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>📊 Electricity Tracker Dashboard</h1>
+            <p class="dashboard-subtitle">Track your electricity consumption and costs</p>
+        </div>
         
         <div class="stats-grid">
             <div class="stat-card">
-                <h3>Total Vouchers</h3>
-                <p id="totalVouchers">0</p>
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <h3>R3217.38</h3>
+                    <p>TOTAL SPENT</p>
+                </div>
             </div>
             <div class="stat-card">
-                <h3>Total Amount</h3>
-                <p id="totalAmount">R0.00</p>
+                <div class="stat-icon">⚡</div>
+                <div class="stat-content">
+                    <h3>1123.9 kWh</h3>
+                    <p>TOTAL KWH</p>
+                </div>
             </div>
             <div class="stat-card">
-                <h3>Total Units</h3>
-                <p id="totalUnits">0 kWh</p>
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3>R2.86/kWh</h3>
+                    <p>AVG COST</p>
+                </div>
             </div>
             <div class="stat-card">
-                <h3>Avg Cost/kWh</h3>
-                <p id="avgCost">R0.00</p>
+                <div class="stat-icon">📋</div>
+                <div class="stat-content">
+                    <h3>R0.00</h3>
+                    <p>TOTAL VAT</p>
+                </div>
             </div>
         </div>
-        
-        <div class="recent-section">
-            <h2>Recent Vouchers</h2>
-            <div id="recentVouchers">Loading...</div>
-        </div>
-        
-        <div class="recent-section">
-            <h2>Recent Readings</h2>
-            <div id="recentReadings">Loading...</div>
+
+        <div class="dashboard-sections">
+            <div class="section-header">
+                <h2>📅 Last 6 Months</h2>
+            </div>
+            
+            <div class="monthly-grid">
+                <div class="monthly-card">
+                    <h4>Sep 2025</h4>
+                    <h3>R869.56</h3>
+                    <p>296.2 kWh</p>
+                    <small>Avg R2.94/kWh</small>
+                </div>
+                <div class="monthly-card">
+                    <h4>Aug 2025</h4>
+                    <h3>R1304.34</h3>
+                    <p>444.5 kWh</p>
+                    <small>Avg R2.94/kWh</small>
+                </div>
+                <div class="monthly-card">
+                    <h4>Jul 2025</h4>
+                    <h3>R1043.48</h3>
+                    <p>383.4 kWh</p>
+                    <small>Avg R2.72/kWh</small>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <h2>📈 Usage Analytics</h2>
+            </div>
+            
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h4>Monthly Consumption</h4>
+                    <div class="chart-placeholder">
+                        <p>Chart showing monthly usage trends</p>
+                    </div>
+                </div>
+                <div class="analytics-card">
+                    <h4>📄 Recent Vouchers</h4>
+                    <div class="recent-list">
+                        <div class="recent-item">
+                            <span>R434.78 - 148.1 kWh</span>
+                            <small>2025/09/02</small>
+                        </div>
+                        <div class="recent-item">
+                            <span>R434.78 - 148.1 kWh</span>
+                            <small>2025/09/02</small>
+                        </div>
+                        <div class="recent-item">
+                            <span>R434.78 - 148.1 kWh</span>
+                            <small>2025/08/23</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="analytics-card">
+                    <h4>📊 Recent Readings</h4>
+                    <div class="recent-list">
+                        <div class="recent-item">
+                            <span>Reading: 280.89</span>
+                            <small>2025/09/05</small>
+                        </div>
+                        <div class="recent-item">
+                            <span>Reading: 329.13</span>
+                            <small>2025/09/02</small>
+                        </div>
+                        <div class="recent-item">
+                            <span>Reading: 76.78</span>
+                            <small>2025/08/30</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     

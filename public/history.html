@@ -8,15 +8,82 @@
 </head>
 <body>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/voucher">Add Voucher</a>
-        <a href="/reading">Add Reading</a>
-        <a href="/history" class="active">History</a>
-        <a href="#" id="logout">Logout</a>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn active">📝 History</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
     </nav>
     
-    <div class="container">
-        <h1>Transaction History</h1>
+    <div class="history-container">
+        <div class="history-header">
+            <h1>📋 Transaction History</h1>
+            <div class="history-buttons">
+                <button class="history-btn active">📋 Show All Data</button>
+                <button class="history-btn">💳 Add Voucher</button>
+                <button class="history-btn">📊 Add Reading</button>
+            </div>
+        </div>
+        
+        <div class="history-tabs">
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="vouchers">💳 Vouchers</button>
+                <button class="tab-btn" data-tab="readings">📊 Readings</button>
+                <button class="tab-btn" data-tab="combined">📋 All Combined</button>
+            </div>
+        </div>
+        
+        <div class="history-content">
+            <div class="history-table-header">
+                <h2>📋 All Transactions (Combined)</h2>
+                <p>Showing all 26 transactions in chronological order</p>
+            </div>
+            
+            <div class="history-table-container">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>DATE & TIME</th>
+                            <th>TYPE</th>
+                            <th>DETAILS</th>
+                            <th>AMOUNT/VALUE</th>
+                            <th>UNITS/USAGE</th>
+                            <th>NOTES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <tr class="reading-row">
+                            <td>2025/09/05, 02:00:00</td>
+                            <td><span class="type-badge reading">📊 READING</span></td>
+                            <td>Meter Reading</td>
+                            <td>280.89 kWh</td>
+                            <td>-48.2 kWh used</td>
+                            <td>3 days, -16.07 kWh/day</td>
+                        </tr>
+                        <tr class="voucher-row">
+                            <td>2025/09/02, 02:00:00</td>
+                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
+                            <td>Token: 3714-3240-5853-7054-6208</td>
+                            <td>R434.78</td>
+                            <td>148.1 kWh</td>
+                            <td>-</td>
+                        </tr>
+                        <tr class="voucher-row">
+                            <td>2025/09/02, 02:00:00</td>
+                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
+                            <td>Token: 0570-5615-4778-6089-1034</td>
+                            <td>R434.78</td>
+                            <td>148.1 kWh</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
         
         <!-- Filters -->
         <div class="filters card">

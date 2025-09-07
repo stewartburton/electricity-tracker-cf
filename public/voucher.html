@@ -8,64 +8,78 @@
 </head>
 <body>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/voucher" class="active">Add Voucher</a>
-        <a href="/reading">Add Reading</a>
-        <a href="/history">History</a>
-        <a href="#" id="logout">Logout</a>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn active">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
     </nav>
     
-    <div class="container">
-        <h1>Add Electricity Voucher</h1>
-        
-        <!-- SMS Parser Section -->
-        <div class="sms-parser-section">
-            <h2>📱 Quick Import from SMS</h2>
-            <p>Paste your electricity SMS here and we'll extract the details automatically:</p>
-            <textarea id="smsText" placeholder="Paste your electricity purchase SMS here..." rows="5"></textarea>
-            <button id="parseSmsBtn" class="secondary-btn">Parse SMS</button>
+    <div class="page-container">
+        <div class="page-header">
+            <h1>💳 Add Voucher</h1>
         </div>
         
-        <div class="divider">
-            <span>OR</span>
+        <div class="voucher-form-container">
+            <div class="voucher-form">
+                <!-- SMS Parser Section -->
+                <div class="sms-import-section">
+                    <div class="section-header-inline">
+                        <h3>📧 📲 Quick SMS Import</h3>
+                        <button id="parseSmsBtn" class="parse-btn">⚡ Parse SMS</button>
+                    </div>
+                    <p>Paste your FNB electricity voucher SMS below to automatically fill the form</p>
+                    <textarea id="smsText" placeholder="FNB :-) Cape Town. Elec Amt: R43.48. Vat Amt: R6.52. Meter: 09000490491. Credit Token: 3752-3467-7715-5148-9439. Units: 14.9kWh." rows="4"></textarea>
+                </div>
+                
+                <!-- Manual Entry Form -->
+                <div class="voucher-details-section">
+                    <div class="section-header-inline">
+                        <h3>💳 📋 Voucher Details</h3>
+                    </div>
+                    
+                    <form id="voucherForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="amount">💰 Amount (Rand)</label>
+                                <input type="number" id="amount" name="amount" step="0.01" placeholder="0.00" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="vat">📊 VAT Amount (Rand)</label>
+                                <input type="number" id="vat" name="vat" step="0.01" placeholder="0.00">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="units">⚡ Units (kWh)</label>
+                            <input type="number" id="units" name="units" step="0.01" placeholder="0.00" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="token">🔑 Credit Token</label>
+                            <input type="text" id="token" name="token" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="purchase_date">🕒 Purchase Date & Time</label>
+                            <input type="datetime-local" id="purchase_date" name="purchase_date">
+                            <small>When was this voucher purchased?</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="notes">📝 Notes (optional)</label>
+                            <textarea id="notes" name="notes" rows="3" placeholder="e.g. Emergency top-up, Monthly purchase"></textarea>
+                        </div>
+                        
+                        <button type="submit" class="primary-btn">💾 Save Voucher</button>
+                    </form>
+                </div>
+            </div>
         </div>
-        
-        <!-- Manual Entry Form -->
-        <form id="voucherForm">
-            <h2>Manual Entry</h2>
-            
-            <div class="form-group">
-                <label for="amount">Amount (R)</label>
-                <input type="number" id="amount" name="amount" step="0.01" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="vat">VAT Amount (R)</label>
-                <input type="number" id="vat" name="vat" step="0.01">
-            </div>
-            
-            <div class="form-group">
-                <label for="units">Units (kWh)</label>
-                <input type="number" id="units" name="units" step="0.01" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="token">Token Number</label>
-                <input type="text" id="token" name="token" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="purchase_date">Purchase Date & Time</label>
-                <input type="datetime-local" id="purchase_date" name="purchase_date">
-            </div>
-            
-            <div class="form-group">
-                <label for="notes">Notes (Optional)</label>
-                <textarea id="notes" name="notes" rows="3"></textarea>
-            </div>
-            
-            <button type="submit" class="primary-btn">Save Voucher</button>
-        </form>
         
         <!-- Recent Vouchers -->
         <div class="recent-section">

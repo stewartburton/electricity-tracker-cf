@@ -8,7 +8,9 @@
       "Bash(git push:*)",
       "Bash(git remote remove:*)",
       "Read(//d/Dev/Repos/**)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "WebFetch(domain:github.com)",
+      "Read(//c/Users/stewa/OneDrive/Pictures/Screenpresso/**)"
     ],
     "deny": [],
     "ask": []
