@@ -1,94 +1,37 @@
 # ⚡ Electricity Tracker - Cloudflare Workers Edition
 
-## 📋 Complete Recovery & Setup Instructions
+A modern web application for tracking prepaid electricity usage, built with Cloudflare Workers and D1 database.
+
+![Electricity Tracker Dashboard](https://img.shields.io/badge/Status-Active-green) 
+![Cloudflare Workers](https://img.shields.io/badge/Platform-Cloudflare%20Workers-orange)
+![D1 Database](https://img.shields.io/badge/Database-D1-blue)
+
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js installed (v16 or higher)
-- Git installed
-- Windows Command Prompt or PowerShell
+- Node.js (v16 or higher)
+- Git
+- Cloudflare account
 
-### Step 1: Create Project Structure
+### Setup
 ```bash
-# Create and enter project directory
-mkdir electricity-tracker-cf
+# Clone the repository
+git clone https://github.com/stewartburton/electricity-tracker-cf.git
 cd electricity-tracker-cf
 
-# Create folder structure
-mkdir src
-mkdir public
-mkdir public\css
-mkdir public\js
-mkdir migrations
-```
+# Install dependencies
+npm install
 
-### Step 2: Initialize Project
-```bash
-# Initialize git
-git init
-git remote add origin https://github.com/stewartburton/electricity-tracker-cf.git
-
-# Initialize npm and install dependencies
-npm init -y
-npm install wrangler --save-dev
-```
-
-### Step 3: Create Configuration Files
-
-Create these files in the root directory:
-
-**package.json** - Copy from artifact above
-**wrangler.toml** - Copy from artifact above  
-**.gitignore** - Copy from artifact above
-
-### Step 4: Create Source Files
-
-**src/index.js** - Copy the complete worker code from the "src/index.js - Your recovered Worker code" artifact
-
-### Step 5: Create Frontend Files
-
-In the `public` folder:
-- **index.html** - Login page (copy from artifact)
-- **dashboard.html** - Dashboard page (copy from artifact)
-- **voucher.html** - Voucher entry page (copy from artifact)
-- **reading.html** - Reading entry page (copy from artifact)
-- **history.html** - Transaction history page (copy from artifact)
-- **api-config.js** - API configuration (copy from artifact)
-
-In the `public/css` folder:
-- **styles.css** - Complete styles (copy from artifact)
-
-In the `public/js` folder:
-- **app.js** - Application JavaScript (copy from artifact)
-
-### Step 6: Create Database Migration
-
-In the `migrations` folder:
-- **001_init.sql** - Database schema (copy from artifact)
-
-### Step 7: Test Locally
-```bash
-# Test the application locally
+# Start development server
 npm run dev
-
-# Open browser to http://localhost:8787
 ```
 
-### Step 8: Deploy to Cloudflare
+Visit `http://localhost:8787` to view the application.
+
+### Deploy to Production
 ```bash
-# Deploy to production
+# Deploy to Cloudflare Workers
 npm run deploy
-```
-
-### Step 9: Push to GitHub
-```bash
-# Add all files
-git add .
-
-# Commit
-git commit -m "Recovery: Complete Electricity Tracker application restored"
-
-# Push to GitHub
-git push -u origin main
 ```
 
 ## 🔑 Important Information
@@ -127,18 +70,25 @@ electricity-tracker-cf/
 └── README.md             # Documentation
 ```
 
-## 🚀 Features
+## ✨ Features
 
-### Implemented
-✅ User authentication (login/register)
-✅ Voucher management
-✅ SMS parser for quick voucher import
-✅ Meter readings tracking
-✅ Dashboard with statistics
-✅ Transaction history with filters
-✅ Monthly analytics
-✅ South African timezone support
-✅ Notes on vouchers and readings
+### 🎨 Modern UI/UX
+- **Purple gradient theme** with glassmorphism effects
+- **Responsive design** that works on desktop and mobile
+- **Intuitive navigation** with emoji icons and pill-shaped buttons
+- **Card-based layouts** with smooth animations and hover effects
+- **Professional typography** with proper visual hierarchy
+
+### 🔧 Core Functionality
+✅ **User Authentication** - Secure login/register system
+✅ **Voucher Management** - Track electricity voucher purchases
+✅ **SMS Import** - Quick voucher entry from FNB SMS messages
+✅ **Meter Readings** - Record and track electricity meter readings
+✅ **Dashboard Analytics** - Visual stats and consumption trends
+✅ **Transaction History** - Detailed view with filtering options
+✅ **Monthly Reports** - Track spending and usage patterns
+✅ **Notes System** - Add notes to vouchers and readings
+✅ **South African Support** - Timezone and currency formatting
 
 ### API Endpoints
 
@@ -201,14 +151,45 @@ npx wrangler d1 execute electricity-tracker-db --sql="SELECT * FROM users"
 npx wrangler d1 execute electricity-tracker-db --file=./migrations/001_init.sql
 ```
 
-## 🔄 Updates Since Recovery
+## 📱 Screenshots
 
-- ✅ Added notes columns to database tables
-- ✅ Fixed duplicate API_URL declaration issue
-- ✅ Created centralized app.js for better code organization
-- ✅ Added comprehensive error handling
-- ✅ Improved UI/UX with better styles
-- ✅ Added transaction history with filters
+### Login Page
+Clean, modern login interface with branded styling and secure authentication.
+
+### Dashboard
+Comprehensive overview with:
+- **Statistics Cards** showing total spent, kWh consumed, and average cost
+- **Monthly Breakdown** for the last 6 months
+- **Usage Analytics** with recent vouchers and readings
+- **Interactive Charts** for consumption trends
+
+### Add Voucher
+Streamlined voucher entry with:
+- **SMS Import** - Paste FNB SMS for automatic parsing
+- **Manual Entry** - Clean form for manual voucher details
+- **Smart Validation** - Ensures data accuracy
+
+### Add Reading
+Simple meter reading entry with:
+- **Current Reading Input** - Easy number entry
+- **Tips Section** - Helpful guidance for accurate readings
+- **Historical Context** - Shows previous readings
+
+### History
+Complete transaction overview:
+- **Tabbed Interface** - Separate views for vouchers, readings, or combined
+- **Detailed Table** - All transaction data in sortable columns
+- **Filter Options** - Quick access to specific time periods
+
+## 🔄 Recent Updates
+
+- ✅ **Complete UI Redesign** - Modern purple gradient theme with glassmorphism
+- ✅ **Responsive Navigation** - New navigation bar with brand logo and icons
+- ✅ **Dashboard Overhaul** - Statistics cards, monthly summaries, and analytics
+- ✅ **Enhanced Forms** - Improved voucher and reading entry interfaces
+- ✅ **History Table** - Professional data table with filtering and sorting
+- ✅ **Mobile Optimization** - Responsive design for all screen sizes
+- ✅ **Visual Enhancements** - Emoji icons, hover effects, and smooth animations
 
 ## 📧 Support
 
@@ -219,5 +200,35 @@ For issues or questions:
 
 ---
 
-**Recovery Date**: September 2025
-**Status**: ✅ Fully Recovered and Functional
+## 🏗️ Built With
+
+- **[Cloudflare Workers](https://workers.cloudflare.com/)** - Serverless runtime
+- **[Cloudflare D1](https://developers.cloudflare.com/d1/)** - Serverless SQL database
+- **Vanilla JavaScript** - Frontend framework-free for performance
+- **Modern CSS** - Glassmorphism, gradients, and responsive design
+- **JWT Authentication** - Secure user sessions
+
+## 📊 Performance
+
+- **⚡ Ultra-fast loading** - Cloudflare's global edge network
+- **🔒 Secure by default** - HTTPS everywhere, JWT tokens
+- **📱 Mobile-first** - Responsive design works on all devices
+- **🌍 Global scale** - Available worldwide with low latency
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Last Updated**: September 2025  
+**Status**: ✅ Active Development  
+**Version**: 2.0.0 - Modern UI Release
