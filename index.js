@@ -93,7 +93,7 @@ app.post('/api/auth/login', async (c) => {
 // Register endpoint
 app.post('/api/auth/register', async (c) => {
   try {
-    const { email, password } = await c.req.json();
+    const { email, password, registrationKey, inviteCode } = await c.req.json();
     
     if (!email || !password) {
       return c.json({ error: 'Email and password are required' }, 400);
@@ -103,6 +103,11 @@ app.post('/api/auth/register', async (c) => {
       return c.json({ error: 'Password must be at least 6 characters' }, 400);
     }
 
+    // Must have either registration key OR invite code
+    if (!registrationKey && !inviteCode) {
+      return c.json({ error: 'Either registration key or invite code is required' }, 400);
+    }
+
     const db = c.env.DB;
     
     // Check if user already exists
@@ -110,6 +115,19 @@ app.post('/api/auth/register', async (c) => {
     
     if (existingUser) {
       return c.json({ error: 'User already exists' }, 409);
+    }
+
+    // If using invite code, validate it exists
+    let groupId = null;
+    if (inviteCode) {
+      const group = await db.prepare(`
+        SELECT id FROM account_groups WHERE invite_code = ?
+      `).bind(inviteCode).first();
+      
+      if (!group) {
+        return c.json({ error: 'Invalid invite code' }, 400);
+      }
+      groupId = group.id;
     }
 
     // Hash password
@@ -125,10 +143,20 @@ app.post('/api/auth/register', async (c) => {
       return c.json({ error: 'Failed to create user' }, 500);
     }
 
+    const userId = result.meta.last_row_id;
+
+    // If invite code was used, add user to the group
+    if (groupId) {
+      await db.prepare(`
+        INSERT INTO user_groups (user_id, group_id, role)
+        VALUES (?, ?, 'member')
+      `).bind(userId, groupId).run();
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       { 
-        userId: result.meta.last_row_id, 
+        userId: userId, 
         email: email
       },
       c.env.JWT_SECRET,
@@ -139,7 +167,7 @@ app.post('/api/auth/register', async (c) => {
       success: true,
       token,
       user: {
-        id: result.meta.last_row_id,
+        id: userId,
         email: email,
         created_at: new Date().toISOString()
       }
@@ -172,8 +200,82 @@ app.use('/api/readings/*', authMiddleware);
 app.use('/api/vouchers/*', authMiddleware);
 app.use('/api/dashboard/*', authMiddleware);
 app.use('/api/account/*', authMiddleware);
+app.use('/api/transactions*', authMiddleware);
 
-// Dashboard stats
+// Dashboard endpoint (legacy compatibility)
+app.get('/api/dashboard', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    
+    // Get all shared user IDs (including linked accounts)
+    const sharedUserIds = await getSharedUserIds(db, user.userId);
+    const userIdsStr = sharedUserIds.join(',');
+
+    // Get voucher totals
+    const voucherResult = await db.prepare(`
+      SELECT 
+        COALESCE(SUM(rand_amount), 0) as total_amount,
+        COALESCE(SUM(kwh_amount), 0) as total_units,
+        COALESCE(SUM(vat_amount), 0) as total_vat,
+        COUNT(*) as total_vouchers
+      FROM vouchers 
+      WHERE user_id IN (${userIdsStr})
+    `).first();
+
+    // Calculate average cost per kWh
+    const avgCostPerKwh = voucherResult.total_units > 0 ? 
+      voucherResult.total_amount / voucherResult.total_units : 0;
+
+    // Get recent vouchers
+    const recentVouchers = await db.prepare(`
+      SELECT * FROM vouchers 
+      WHERE user_id IN (${userIdsStr})
+      ORDER BY purchase_date DESC 
+      LIMIT 5
+    `).all();
+
+    // Get recent readings
+    const recentReadings = await db.prepare(`
+      SELECT * FROM readings 
+      WHERE user_id IN (${userIdsStr})
+      ORDER BY reading_date DESC 
+      LIMIT 5
+    `).all();
+
+    // Get monthly data for the last 6 months
+    const monthlyData = await db.prepare(`
+      SELECT 
+        strftime('%Y-%m', purchase_date) as month,
+        SUM(rand_amount) as amount,
+        SUM(kwh_amount) as kwh
+      FROM vouchers 
+      WHERE user_id IN (${userIdsStr})
+        AND purchase_date >= date('now', '-6 months')
+      GROUP BY strftime('%Y-%m', purchase_date)
+      ORDER BY month DESC
+    `).all();
+
+    return c.json({
+      success: true,
+      totalVouchers: voucherResult.total_vouchers || 0,
+      totalAmount: voucherResult.total_amount || 0,
+      totalUnits: voucherResult.total_units || 0,
+      totalVat: voucherResult.total_vat || 0,
+      avgCostPerKwh: avgCostPerKwh || 0,
+      recentVouchers: recentVouchers.results || [],
+      recentReadings: recentReadings.results || [],
+      monthlyData: monthlyData.results || [],
+      linkedAccountCount: sharedUserIds.length
+    });
+
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    return c.json({ error: 'Failed to fetch dashboard data' }, 500);
+  }
+});
+
+// Dashboard stats (new format)
 app.get('/api/dashboard/stats', async (c) => {
   try {
     const user = c.get('user');
@@ -478,6 +580,61 @@ app.post('/api/account/leave-group', async (c) => {
   } catch (error) {
     console.error('Leave group error:', error);
     return c.json({ error: 'Failed to leave group' }, 500);
+  }
+});
+
+// Transactions endpoint for history page
+app.get('/api/transactions', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    
+    // Get all shared user IDs (including linked accounts)
+    const sharedUserIds = await getSharedUserIds(db, user.userId);
+    
+    // Simple approach - get all vouchers and readings for shared users
+    const vouchers = await db.prepare(`
+      SELECT 
+        'voucher' as type,
+        id,
+        user_id,
+        token_number,
+        purchase_date as date,
+        rand_amount,
+        kwh_amount,
+        vat_amount,
+        notes,
+        created_at
+      FROM vouchers 
+      WHERE user_id = ? OR user_id = ?
+      ORDER BY purchase_date DESC
+    `).bind(sharedUserIds[0] || user.userId, sharedUserIds[1] || user.userId).all();
+
+    const readings = await db.prepare(`
+      SELECT 
+        'reading' as type,
+        id,
+        user_id,
+        reading_value,
+        reading_date as date,
+        notes,
+        created_at
+      FROM readings 
+      WHERE user_id = ? OR user_id = ?
+      ORDER BY reading_date DESC
+    `).bind(sharedUserIds[0] || user.userId, sharedUserIds[1] || user.userId).all();
+
+    return c.json({
+      success: true,
+      vouchers: vouchers.results || [],
+      readings: readings.results || [],
+      totalVouchers: (vouchers.results || []).length,
+      totalReadings: (readings.results || []).length
+    });
+
+  } catch (error) {
+    console.error('Transactions error:', error);
+    return c.json({ error: 'Failed to fetch transaction data' }, 500);
   }
 });
 

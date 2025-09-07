@@ -29,28 +29,28 @@
             <div class="stat-card">
                 <div class="stat-icon">💰</div>
                 <div class="stat-content">
-                    <h3>R3217.38</h3>
+                    <h3 id="totalAmount">R0.00</h3>
                     <p>TOTAL SPENT</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">⚡</div>
                 <div class="stat-content">
-                    <h3>1123.9 kWh</h3>
+                    <h3 id="totalUnits">0 kWh</h3>
                     <p>TOTAL KWH</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">📊</div>
                 <div class="stat-content">
-                    <h3>R2.86/kWh</h3>
+                    <h3 id="avgCost">R0.00/kWh</h3>
                     <p>AVG COST</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">📋</div>
                 <div class="stat-content">
-                    <h3>R0.00</h3>
+                    <h3 id="totalVat">R0.00</h3>
                     <p>TOTAL VAT</p>
                 </div>
             </div>
@@ -61,24 +61,12 @@
                 <h2>📅 Last 6 Months</h2>
             </div>
             
-            <div class="monthly-grid">
+            <div class="monthly-grid" id="monthlyGrid">
                 <div class="monthly-card">
-                    <h4>Sep 2025</h4>
-                    <h3>R869.56</h3>
-                    <p>296.2 kWh</p>
-                    <small>Avg R2.94/kWh</small>
-                </div>
-                <div class="monthly-card">
-                    <h4>Aug 2025</h4>
-                    <h3>R1304.34</h3>
-                    <p>444.5 kWh</p>
-                    <small>Avg R2.94/kWh</small>
-                </div>
-                <div class="monthly-card">
-                    <h4>Jul 2025</h4>
-                    <h3>R1043.48</h3>
-                    <p>383.4 kWh</p>
-                    <small>Avg R2.72/kWh</small>
+                    <h4>Loading...</h4>
+                    <h3>R0.00</h3>
+                    <p>0 kWh</p>
+                    <small>Calculating...</small>
                 </div>
             </div>
 
@@ -95,35 +83,19 @@
                 </div>
                 <div class="analytics-card">
                     <h4>📄 Recent Vouchers</h4>
-                    <div class="recent-list">
+                    <div class="recent-list" id="recentVouchers">
                         <div class="recent-item">
-                            <span>R434.78 - 148.1 kWh</span>
-                            <small>2025/09/02</small>
-                        </div>
-                        <div class="recent-item">
-                            <span>R434.78 - 148.1 kWh</span>
-                            <small>2025/09/02</small>
-                        </div>
-                        <div class="recent-item">
-                            <span>R434.78 - 148.1 kWh</span>
-                            <small>2025/08/23</small>
+                            <span>Loading...</span>
+                            <small>Loading...</small>
                         </div>
                     </div>
                 </div>
                 <div class="analytics-card">
                     <h4>📊 Recent Readings</h4>
-                    <div class="recent-list">
+                    <div class="recent-list" id="recentReadings">
                         <div class="recent-item">
-                            <span>Reading: 280.89</span>
-                            <small>2025/09/05</small>
-                        </div>
-                        <div class="recent-item">
-                            <span>Reading: 329.13</span>
-                            <small>2025/09/02</small>
-                        </div>
-                        <div class="recent-item">
-                            <span>Reading: 76.78</span>
-                            <small>2025/08/30</small>
+                            <span>Loading...</span>
+                            <small>Loading...</small>
                         </div>
                     </div>
                 </div>
@@ -152,10 +124,10 @@
                 
                 if (data) {
                     // Update stats
-                    document.getElementById('totalVouchers').textContent = data.totalVouchers || 0;
                     document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
-                    document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(2)} kWh`;
-                    document.getElementById('avgCost').textContent = ET.utils.formatCurrency(data.avgCostPerKwh);
+                    document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
+                    document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
+                    document.getElementById('totalVat').textContent = ET.utils.formatCurrency(data.totalVat);
                     
                     // Display recent vouchers
                     if (data.recentVouchers && data.recentVouchers.length > 0) {
@@ -180,7 +152,29 @@
                         `).join('');
                         document.getElementById('recentReadings').innerHTML = readingsHtml;
                     } else {
-                        document.getElementById('recentReadings').innerHTML = '<p>No readings yet</p>';
+                        document.getElementById('recentReadings').innerHTML = '<div class="recent-item"><span>No readings yet</span></div>';
+                    }
+                    
+                    // Display monthly data
+                    if (data.monthlyData && data.monthlyData.length > 0) {
+                        const monthlyHtml = data.monthlyData.map(m => {
+                            const avgCost = m.kwh > 0 ? (m.amount / m.kwh) : 0;
+                            const monthName = new Date(m.month + '-01').toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short' 
+                            });
+                            return `
+                                <div class="monthly-card">
+                                    <h4>${monthName}</h4>
+                                    <h3>${ET.utils.formatCurrency(m.amount)}</h3>
+                                    <p>${m.kwh.toFixed(1)} kWh</p>
+                                    <small>Avg ${ET.utils.formatCurrency(avgCost)}/kWh</small>
+                                </div>
+                            `;
+                        }).join('');
+                        document.getElementById('monthlyGrid').innerHTML = monthlyHtml;
+                    } else {
+                        document.getElementById('monthlyGrid').innerHTML = '<div class="monthly-card"><h4>No Data</h4><h3>R0.00</h3><p>0 kWh</p><small>No purchases yet</small></div>';
                     }
                 }
                 
