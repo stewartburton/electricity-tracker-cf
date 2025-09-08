@@ -200,7 +200,7 @@ app.use('/api/readings/*', authMiddleware);
 app.use('/api/vouchers/*', authMiddleware);
 app.use('/api/dashboard/*', authMiddleware);
 app.use('/api/account/*', authMiddleware);
-app.use('/api/transactions*', authMiddleware);
+app.use('/api/transactions', authMiddleware);
 
 // Dashboard endpoint (legacy compatibility)
 app.get('/api/dashboard', async (c) => {
@@ -589,7 +589,21 @@ app.get('/api/transactions', async (c) => {
     const user = c.get('user');
     const db = c.env.DB;
     
-    // Get vouchers for current user and linked accounts
+    // Get all shared user IDs (including linked accounts) - same as dashboard
+    const sharedUserIds = await getSharedUserIds(db, user.userId);
+    const userIdsStr = sharedUserIds.join(',');
+    
+    // Get month filter if provided
+    const month = c.req.query('month');
+    let dateFilter = '';
+    
+    if (month) {
+      dateFilter = `AND strftime('%Y-%m', purchase_date) = '${month}'`;
+    }
+    
+    const readingDateFilter = month ? `AND strftime('%Y-%m', reading_date) = '${month}'` : '';
+    
+    // Get vouchers - same pattern as dashboard
     const vouchers = await db.prepare(`
       SELECT 
         'voucher' as type,
@@ -603,10 +617,11 @@ app.get('/api/transactions', async (c) => {
         notes,
         created_at
       FROM vouchers 
-      WHERE user_id = 4 OR user_id = 5
+      WHERE user_id IN (${userIdsStr}) ${dateFilter}
       ORDER BY purchase_date DESC
     `).all();
 
+    // Get readings - same pattern as dashboard
     const readings = await db.prepare(`
       SELECT 
         'reading' as type,
@@ -617,9 +632,10 @@ app.get('/api/transactions', async (c) => {
         notes,
         created_at
       FROM readings 
-      WHERE user_id = 4 OR user_id = 5
+      WHERE user_id IN (${userIdsStr}) ${readingDateFilter}
       ORDER BY reading_date DESC
     `).all();
+    
 
     return c.json({
       success: true,

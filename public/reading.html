@@ -51,16 +51,11 @@
                     <li>🔍 Make sure to read all digits including decimal places</li>
                     <li>📷 Take a photo of your meter for reference</li>
                     <li>📊 Regular readings help track your consumption patterns</li>
-                    <li>⚠️ Check that the reading is higher than your previous reading</li>
+                    <li>⚠️ For prepaid meters, readings decrease as you use electricity</li>
                 </ul>
             </div>
         </div>
         
-        <!-- Recent Readings -->
-        <div class="recent-section">
-            <h2>Recent Readings</h2>
-            <div id="recentReadings">Loading...</div>
-        </div>
     </div>
     
     <script src="/api-config.js"></script>
@@ -72,7 +67,6 @@
         if (!ET.auth.checkAuth()) {
             // User will be redirected to login
         } else {
-            loadRecentReadings();
             setDefaultDateTime();
         }
         
@@ -100,54 +94,12 @@
                     alert('Reading saved successfully!');
                     document.getElementById('readingForm').reset();
                     setDefaultDateTime();
-                    loadRecentReadings();
                 }
             } catch (error) {
                 alert('Error saving reading: ' + error.message);
             }
         });
         
-        // Load recent readings
-        async function loadRecentReadings() {
-            try {
-                const readings = await ET.api.get('/api/readings?limit=10');
-                
-                if (readings && readings.length > 0) {
-                    const html = readings.slice(0, 10).map(r => {
-                        const date = new Date(r.reading_date);
-                        let consumption = '';
-                        
-                        // Calculate consumption if there's a previous reading
-                        const currentIndex = readings.indexOf(r);
-                        if (currentIndex < readings.length - 1) {
-                            const prevReading = readings[currentIndex + 1];
-                            const consumed = r.reading_value - prevReading.reading_value;
-                            if (consumed > 0) {
-                                consumption = `<span class="consumption">Used: ${consumed.toFixed(2)} kWh</span>`;
-                            }
-                        }
-                        
-                        return `
-                            <div class="reading-item">
-                                <div class="reading-header">
-                                    <span class="date">${ET.utils.formatDateTime(r.reading_date)}</span>
-                                    <span class="value">${r.reading_value.toFixed(2)} kWh</span>
-                                </div>
-                                ${consumption}
-                                ${r.notes ? `<div class="reading-notes">${r.notes}</div>` : ''}
-                            </div>
-                        `;
-                    }).join('');
-                    
-                    document.getElementById('recentReadings').innerHTML = html;
-                } else {
-                    document.getElementById('recentReadings').innerHTML = '<p>No readings yet. Add your first meter reading above!</p>';
-                }
-            } catch (error) {
-                console.error('Error loading readings:', error);
-                document.getElementById('recentReadings').innerHTML = '<p>Error loading readings</p>';
-            }
-        }
     </script>
 </body>
 </html>

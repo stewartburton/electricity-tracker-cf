@@ -81,11 +81,6 @@
             </div>
         </div>
         
-        <!-- Recent Vouchers -->
-        <div class="recent-section">
-            <h2>Recent Vouchers</h2>
-            <div id="recentVouchers">Loading...</div>
-        </div>
     </div>
     
     <script src="/api-config.js"></script>
@@ -97,7 +92,6 @@
         if (!ET.auth.checkAuth()) {
             // User will be redirected to login
         } else {
-            loadRecentVouchers();
             setDefaultDateTime();
         }
         
@@ -158,43 +152,12 @@
                     document.getElementById('voucherForm').reset();
                     document.getElementById('smsText').value = '';
                     setDefaultDateTime();
-                    loadRecentVouchers();
                 }
             } catch (error) {
                 ET.utils.showMessage('Error saving voucher: ' + error.message, 'error');
             }
         });
         
-        // Load recent vouchers
-        async function loadRecentVouchers() {
-            try {
-                const vouchers = await ET.api.get('/api/vouchers?limit=5');
-                
-                if (vouchers && vouchers.length > 0) {
-                    const html = vouchers.slice(0, 5).map(v => `
-                        <div class="voucher-item">
-                            <div class="voucher-header">
-                                <span class="date">${ET.utils.formatDate(v.purchase_date)}</span>
-                                <span class="amount">${ET.utils.formatCurrency(v.rand_amount)}</span>
-                            </div>
-                            <div class="voucher-details">
-                                <span>Units: ${v.kwh_amount} kWh</span>
-                                <span>Token: ${v.token_number}</span>
-                                ${v.vat_amount ? `<span>VAT: ${ET.utils.formatCurrency(v.vat_amount)}</span>` : ''}
-                            </div>
-                            ${v.notes ? `<div class="voucher-notes">${v.notes}</div>` : ''}
-                        </div>
-                    `).join('');
-                    
-                    document.getElementById('recentVouchers').innerHTML = html;
-                } else {
-                    document.getElementById('recentVouchers').innerHTML = '<p>No vouchers yet. Add your first voucher above!</p>';
-                }
-            } catch (error) {
-                console.error('Error loading vouchers:', error);
-                document.getElementById('recentVouchers').innerHTML = '<p>Error loading vouchers</p>';
-            }
-        }
     </script>
     
     <style>

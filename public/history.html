@@ -5,6 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>History - Electricity Tracker</title>
     <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        /* Match the filters and summary styling to the main content */
+        .filters.card,
+        .stats-summary.card {
+            background: white !important;
+            color: #333 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+            padding: 25px !important;
+            margin: 20px auto !important;
+            max-width: 1200px !important;
+            border: none !important;
+        }
+        
+        .filters.card h2,
+        .stats-summary.card h2 {
+            color: #333 !important;
+            margin-bottom: 20px !important;
+            font-size: 1.5rem !important;
+            font-weight: 600 !important;
+        }
+        
+        .filter-group {
+            margin-bottom: 15px !important;
+        }
+        
+        .filter-group label {
+            color: #666 !important;
+            font-weight: 500 !important;
+            margin-bottom: 8px !important;
+            display: inline-block !important;
+        }
+        
+        .filter-group input,
+        .filter-group button {
+            margin-right: 10px !important;
+        }
+        
+        .stats-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+            gap: 20px !important;
+        }
+        
+        .stat-item {
+            background: #f8f9fa !important;
+            padding: 15px !important;
+            border-radius: 8px !important;
+            text-align: center !important;
+        }
+        
+        .stat-label {
+            color: #666 !important;
+            font-size: 0.9rem !important;
+            display: block !important;
+            margin-bottom: 5px !important;
+        }
+        
+        .stat-item span:last-child {
+            color: #333 !important;
+            font-size: 1.2rem !important;
+            font-weight: 600 !important;
+        }
+    </style>
 </head>
 <body>
     <nav>
@@ -30,9 +94,9 @@
         
         <div class="history-tabs">
             <div class="tab-buttons">
-                <button class="tab-btn active" data-tab="vouchers">💳 Vouchers</button>
+                <button class="tab-btn" data-tab="vouchers">💳 Vouchers</button>
                 <button class="tab-btn" data-tab="readings">📊 Readings</button>
-                <button class="tab-btn" data-tab="combined">📋 All Combined</button>
+                <button class="tab-btn active" data-tab="combined">📋 All Combined</button>
             </div>
         </div>
         
@@ -55,30 +119,11 @@
                         </tr>
                     </thead>
                     <tbody id="historyTableBody">
-                        <tr class="reading-row">
-                            <td>2025/09/05, 02:00:00</td>
-                            <td><span class="type-badge reading">📊 READING</span></td>
-                            <td>Meter Reading</td>
-                            <td>280.89 kWh</td>
-                            <td>-48.2 kWh used</td>
-                            <td>3 days, -16.07 kWh/day</td>
-                        </tr>
-                        <tr class="voucher-row">
-                            <td>2025/09/02, 02:00:00</td>
-                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
-                            <td>Token: 3714-3240-5853-7054-6208</td>
-                            <td>R434.78</td>
-                            <td>148.1 kWh</td>
-                            <td>-</td>
-                        </tr>
-                        <tr class="voucher-row">
-                            <td>2025/09/02, 02:00:00</td>
-                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
-                            <td>Token: 0570-5615-4778-6089-1034</td>
-                            <td>R434.78</td>
-                            <td>148.1 kWh</td>
-                            <td>-</td>
-                        </tr>
+                        <!-- Pre-allocate space to prevent layout shift -->
+                        <tr><td colspan="6" style="text-align: center; padding: 40px; color: #999;">Loading transactions...</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -126,11 +171,6 @@
             </div>
         </div>
         
-        <!-- Transaction List -->
-        <div class="transactions-section">
-            <h2>All Transactions</h2>
-            <div id="transactionsList">Loading...</div>
-        </div>
     </div>
     
     <script src="/api-config.js"></script>
@@ -149,10 +189,16 @@
         }
         
         function setupFilters() {
-            // Set current month as default
-            const now = new Date();
-            const currentMonth = now.toISOString().slice(0, 7);
-            document.getElementById('monthFilter').value = currentMonth;
+            // Check URL for month parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const monthParam = urlParams.get('month');
+            
+            if (monthParam) {
+                document.getElementById('monthFilter').value = monthParam;
+            } else {
+                // Don't set a default month filter - show all data
+                document.getElementById('monthFilter').value = '';
+            }
             
             // Filter button
             document.getElementById('filterBtn').addEventListener('click', () => {
@@ -168,6 +214,38 @@
             // Checkboxes
             document.getElementById('showVouchers').addEventListener('change', renderTransactions);
             document.getElementById('showReadings').addEventListener('change', renderTransactions);
+            
+            // Tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    btn.classList.add('active');
+                    
+                    const tab = btn.getAttribute('data-tab');
+                    
+                    // Update checkboxes based on tab
+                    if (tab === 'vouchers') {
+                        document.getElementById('showVouchers').checked = true;
+                        document.getElementById('showReadings').checked = false;
+                    } else if (tab === 'readings') {
+                        document.getElementById('showVouchers').checked = false;
+                        document.getElementById('showReadings').checked = true;
+                    } else if (tab === 'combined') {
+                        document.getElementById('showVouchers').checked = true;
+                        document.getElementById('showReadings').checked = true;
+                    }
+                    
+                    // Update the table header based on selected tab
+                    updateTableHeader(tab);
+                    
+                    renderTransactions();
+                });
+            });
         }
         
         async function loadTransactions() {
@@ -186,7 +264,10 @@
                 }
             } catch (error) {
                 console.error('Error loading transactions:', error);
-                document.getElementById('transactionsList').innerHTML = '<p>Error loading transactions</p>';
+                const tableBody = document.getElementById('historyTableBody');
+                if (tableBody) {
+                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #e53e3e;">Error loading transactions</td></tr>';
+                }
             }
         }
         
@@ -200,6 +281,24 @@
             document.getElementById('totalReadingCount').textContent = allReadings.length;
         }
         
+        function updateTableHeader(activeTab) {
+            const headerTitle = document.querySelector('.history-table-header h2');
+            const headerSubtitle = document.querySelector('.history-table-header p');
+            
+            if (!headerTitle || !headerSubtitle) return;
+            
+            if (activeTab === 'vouchers') {
+                headerTitle.textContent = '💳 Vouchers Only';
+                headerSubtitle.textContent = `Showing voucher purchases in chronological order`;
+            } else if (activeTab === 'readings') {
+                headerTitle.textContent = '📊 Readings Only';
+                headerSubtitle.textContent = `Showing meter readings in chronological order`;
+            } else if (activeTab === 'combined') {
+                headerTitle.textContent = '📋 All Transactions (Combined)';
+                headerSubtitle.textContent = `Showing all transactions in chronological order`;
+            }
+        }
+        
         function renderTransactions() {
             const showVouchers = document.getElementById('showVouchers').checked;
             const showReadings = document.getElementById('showReadings').checked;
@@ -211,8 +310,8 @@
                 transactions.push(...allVouchers.map(v => ({
                     ...v,
                     type: 'voucher',
-                    date: v.purchase_date,
-                    sortDate: new Date(v.purchase_date)
+                    date: v.date,
+                    sortDate: new Date(v.date)
                 })));
             }
             
@@ -221,8 +320,8 @@
                 transactions.push(...allReadings.map(r => ({
                     ...r,
                     type: 'reading',
-                    date: r.reading_date,
-                    sortDate: new Date(r.reading_date)
+                    date: r.date,
+                    sortDate: new Date(r.date)
                 })));
             }
             
@@ -230,50 +329,66 @@
             transactions.sort((a, b) => b.sortDate - a.sortDate);
             
             if (transactions.length === 0) {
-                document.getElementById('transactionsList').innerHTML = '<p>No transactions found</p>';
+                // Show no transactions message in table
+                const tableBody = document.getElementById('historyTableBody');
+                if (tableBody) {
+                    tableBody.innerHTML = '<tr><td colspan="6">No transactions found</td></tr>';
+                }
                 return;
             }
             
-            const html = transactions.map(t => {
+            // Also populate the history table
+            populateHistoryTable(transactions);
+        }
+        
+        function populateHistoryTable(transactions) {
+            const tableBody = document.getElementById('historyTableBody');
+            
+            if (transactions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6">No transactions found</td></tr>';
+                return;
+            }
+            
+            const tableHtml = transactions.map(t => {
                 if (t.type === 'voucher') {
                     return `
-                        <div class="transaction-item voucher-type">
-                            <div class="transaction-icon">💰</div>
-                            <div class="transaction-content">
-                                <div class="transaction-header">
-                                    <span class="transaction-type">Voucher Purchase</span>
-                                    <span class="transaction-date">${ET.utils.formatDateTime(t.date)}</span>
-                                </div>
-                                <div class="transaction-details">
-                                    <span>Amount: ${ET.utils.formatCurrency(t.rand_amount)}</span>
-                                    <span>Units: ${t.kwh_amount} kWh</span>
-                                    <span>Token: ${t.token_number}</span>
-                                    ${t.vat_amount ? `<span>VAT: ${ET.utils.formatCurrency(t.vat_amount)}</span>` : ''}
-                                </div>
-                                ${t.notes ? `<div class="transaction-notes">${t.notes}</div>` : ''}
-                            </div>
-                        </div>
+                        <tr class="voucher-row">
+                            <td>${ET.utils.formatDateTime(t.date)}</td>
+                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
+                            <td>Token: ${t.token_number}</td>
+                            <td>${ET.utils.formatCurrency(t.rand_amount)}</td>
+                            <td>${t.kwh_amount} kWh</td>
+                            <td>${t.notes || '-'}</td>
+                        </tr>
                     `;
                 } else {
                     return `
-                        <div class="transaction-item reading-type">
-                            <div class="transaction-icon">📊</div>
-                            <div class="transaction-content">
-                                <div class="transaction-header">
-                                    <span class="transaction-type">Meter Reading</span>
-                                    <span class="transaction-date">${ET.utils.formatDateTime(t.date)}</span>
-                                </div>
-                                <div class="transaction-details">
-                                    <span>Reading: ${t.reading_value} kWh</span>
-                                </div>
-                                ${t.notes ? `<div class="transaction-notes">${t.notes}</div>` : ''}
-                            </div>
-                        </div>
+                        <tr class="reading-row">
+                            <td>${ET.utils.formatDateTime(t.date)}</td>
+                            <td><span class="type-badge reading">📊 READING</span></td>
+                            <td>Meter Reading</td>
+                            <td>-</td>
+                            <td>${t.reading_value} kWh</td>
+                            <td>${t.notes || '-'}</td>
+                        </tr>
                     `;
                 }
             }).join('');
             
-            document.getElementById('transactionsList').innerHTML = html;
+            tableBody.innerHTML = tableHtml;
+            
+            // Update the count in the subtitle
+            const headerSubtitle = document.querySelector('.history-table-header p');
+            if (headerSubtitle) {
+                const currentTitle = document.querySelector('.history-table-header h2').textContent;
+                if (currentTitle.includes('Vouchers Only')) {
+                    headerSubtitle.textContent = `Showing ${transactions.length} voucher transactions in chronological order`;
+                } else if (currentTitle.includes('Readings Only')) {
+                    headerSubtitle.textContent = `Showing ${transactions.length} meter readings in chronological order`;
+                } else {
+                    headerSubtitle.textContent = `Showing all ${transactions.length} transactions in chronological order`;
+                }
+            }
         }
     </script>
 </body>

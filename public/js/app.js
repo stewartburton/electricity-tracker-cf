@@ -118,11 +118,58 @@
         },
         
         formatDate: function(dateString) {
-            return new Date(dateString).toLocaleDateString('en-ZA');
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                return 'Invalid Date';
+            }
+            return date.toLocaleDateString('en-ZA');
         },
         
         formatDateTime: function(dateString) {
-            return new Date(dateString).toLocaleString('en-ZA');
+            if (!dateString) {
+                return 'No date';
+            }
+            
+            let date = new Date(dateString);
+            
+            // If date is invalid, try different parsing approaches
+            if (isNaN(date.getTime())) {
+                // Try parsing as various formats
+                if (typeof dateString === 'string') {
+                    // Try to parse manually if needed
+                    const parts = dateString.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+                    if (parts) {
+                        date = new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
+                    }
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return 'Invalid Date';
+                }
+            }
+            
+            // Check if the original string was just a date (no time component)
+            const isDateOnly = dateString && dateString.length === 10 && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
+            
+            if (isDateOnly) {
+                // For date-only entries, just show the date without time
+                return date.toLocaleDateString('en-ZA', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            } else {
+                // For entries with time, show both date and time
+                return date.toLocaleDateString('en-ZA', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }) + ', ' + date.toLocaleTimeString('en-ZA', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
         },
         
         showMessage: function(message, type = 'info') {
