@@ -295,6 +295,14 @@
             const maxAmount = Math.max(...sortedData.map(m => m.amount));
             const maxValue = Math.max(maxKwh, maxAmount) * 1.1; // Single max value for both lines
             
+            // Debug: log the values to verify math
+            console.log('Chart Debug:', {
+                maxKwh: maxKwh,
+                maxAmount: maxAmount, 
+                maxValue: maxValue,
+                sampleData: sortedData.map(d => ({ month: d.month, kwh: d.kwh, amount: d.amount }))
+            });
+            
             // Chart dimensions - make it much larger to fill the container
             const chartWidth = 600;
             const chartHeight = 300;
@@ -346,13 +354,6 @@
                             return `<line x1="${x}" y1="${padding.top}" x2="${x}" y2="${padding.top + innerHeight}" stroke="#f8f8f8" stroke-width="1"/>`;
                         }).join('')}
                         
-                        <!-- Area fill for amount -->
-                        <path d="${amountPath} L ${padding.left + innerWidth} ${padding.top + innerHeight} L ${padding.left} ${padding.top + innerHeight} Z" 
-                              fill="url(#amountGradient)" opacity="0.2"/>
-                        
-                        <!-- Area fill for kWh -->
-                        <path d="${kwhPath} L ${padding.left + innerWidth} ${padding.top + innerHeight} L ${padding.left} ${padding.top + innerHeight} Z" 
-                              fill="url(#kwhGradient)" opacity="0.15"/>
                         
                         <!-- Gradients -->
                         <defs>
@@ -367,10 +368,10 @@
                         </defs>
                         
                         <!-- Amount line -->
-                        <path d="${amountPath}" fill="none" stroke="#2196F3" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="${amountPath}" fill="none" stroke="#2196F3" stroke-width="4" stroke-linecap="round"/>
                         
                         <!-- kWh line -->
-                        <path d="${kwhPath}" fill="none" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="${kwhPath}" fill="none" stroke="#4CAF50" stroke-width="4" stroke-linecap="round"/>
                         
                         <!-- Data points -->
                         ${sortedData.map((m, i) => {
@@ -477,8 +478,29 @@
                 
                 kwhHover.addEventListener('mousemove', (e) => {
                     const rect = svg.getBoundingClientRect();
-                    tooltip.style.left = (e.clientX + 10) + 'px';
-                    tooltip.style.top = (e.clientY - 10) + 'px';
+                    const chartContainer = document.getElementById('consumptionChart');
+                    const containerRect = chartContainer.getBoundingClientRect();
+                    
+                    // Calculate relative position within the chart
+                    let left = e.clientX - containerRect.left + 10;
+                    let top = e.clientY - containerRect.top - 10;
+                    
+                    // Keep tooltip within chart bounds
+                    const tooltipWidth = 200; // Approximate tooltip width
+                    const tooltipHeight = 50; // Approximate tooltip height
+                    
+                    if (left + tooltipWidth > containerRect.width) {
+                        left = e.clientX - containerRect.left - tooltipWidth - 10;
+                    }
+                    if (top < 0) {
+                        top = e.clientY - containerRect.top + 20;
+                    }
+                    if (top + tooltipHeight > containerRect.height) {
+                        top = e.clientY - containerRect.top - tooltipHeight - 10;
+                    }
+                    
+                    tooltip.style.left = (containerRect.left + left) + 'px';
+                    tooltip.style.top = (containerRect.top + top) + 'px';
                 });
                 
                 kwhHover.addEventListener('mouseleave', () => {
@@ -493,8 +515,29 @@
                 
                 amountHover.addEventListener('mousemove', (e) => {
                     const rect = svg.getBoundingClientRect();
-                    tooltip.style.left = (e.clientX + 10) + 'px';
-                    tooltip.style.top = (e.clientY - 10) + 'px';
+                    const chartContainer = document.getElementById('consumptionChart');
+                    const containerRect = chartContainer.getBoundingClientRect();
+                    
+                    // Calculate relative position within the chart
+                    let left = e.clientX - containerRect.left + 10;
+                    let top = e.clientY - containerRect.top - 10;
+                    
+                    // Keep tooltip within chart bounds
+                    const tooltipWidth = 200; // Approximate tooltip width
+                    const tooltipHeight = 50; // Approximate tooltip height
+                    
+                    if (left + tooltipWidth > containerRect.width) {
+                        left = e.clientX - containerRect.left - tooltipWidth - 10;
+                    }
+                    if (top < 0) {
+                        top = e.clientY - containerRect.top + 20;
+                    }
+                    if (top + tooltipHeight > containerRect.height) {
+                        top = e.clientY - containerRect.top - tooltipHeight - 10;
+                    }
+                    
+                    tooltip.style.left = (containerRect.left + left) + 'px';
+                    tooltip.style.top = (containerRect.top + top) + 'px';
                 });
                 
                 amountHover.addEventListener('mouseleave', () => {
