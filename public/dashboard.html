@@ -290,14 +290,15 @@
             // Sort data by month (oldest first for the chart)
             const sortedData = monthlyData.sort((a, b) => a.month.localeCompare(b.month));
             
-            // Find the max value for scaling with padding
-            const maxKwh = Math.max(...sortedData.map(m => m.kwh)) * 1.1;
-            const maxAmount = Math.max(...sortedData.map(m => m.amount)) * 1.1;
+            // Find the max value for unified scaling - use the maximum of both data sets
+            const maxKwh = Math.max(...sortedData.map(m => m.kwh));
+            const maxAmount = Math.max(...sortedData.map(m => m.amount));
+            const maxValue = Math.max(maxKwh, maxAmount) * 1.1; // Single max value for both lines
             
             // Chart dimensions - make it much larger to fill the container
             const chartWidth = 600;
             const chartHeight = 300;
-            const padding = { top: 30, right: 80, bottom: 60, left: 80 };
+            const padding = { top: 30, right: 50, bottom: 60, left: 60 };
             const innerWidth = chartWidth - padding.left - padding.right;
             const innerHeight = chartHeight - padding.top - padding.bottom;
             
@@ -321,8 +322,8 @@
                 return path;
             };
             
-            const kwhPath = createSmoothPath(sortedData, 'kwh', maxKwh);
-            const amountPath = createSmoothPath(sortedData, 'amount', maxAmount);
+            const kwhPath = createSmoothPath(sortedData, 'kwh', maxValue);
+            const amountPath = createSmoothPath(sortedData, 'amount', maxValue);
             
             const chartHtml = `
                 <div class="professional-chart">
@@ -374,8 +375,8 @@
                         <!-- Data points -->
                         ${sortedData.map((m, i) => {
                             const x = padding.left + (i * innerWidth / Math.max(1, sortedData.length - 1));
-                            const kwhY = padding.top + innerHeight - (m.kwh / maxKwh * innerHeight);
-                            const amountY = padding.top + innerHeight - (m.amount / maxAmount * innerHeight);
+                            const kwhY = padding.top + innerHeight - (m.kwh / maxValue * innerHeight);
+                            const amountY = padding.top + innerHeight - (m.amount / maxValue * innerHeight);
                             return `
                                 <g class="data-point">
                                     <circle cx="${x}" cy="${amountY}" r="4" fill="white" stroke="#2196F3" stroke-width="2"/>
@@ -393,23 +394,12 @@
                             return `<text x="${x}" y="${chartHeight - 10}" text-anchor="middle" fill="#666" font-size="11" font-family="Arial, sans-serif">${monthName}</text>`;
                         }).join('')}
                         
-                        <!-- Left Y-axis labels (kWh) -->
-                        ${Array.from({length: 5}, (_, i) => {
-                            const y = padding.top + (i * innerHeight / 4);
-                            const kwhValue = ((4 - i) / 4 * maxKwh).toFixed(0);
-                            return `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#4CAF50" font-size="10" font-weight="500" font-family="Arial, sans-serif">${kwhValue} kWh</text>`;
+                        <!-- Y-axis labels (unified scale) -->
+                        ${Array.from({length: 6}, (_, i) => {
+                            const y = padding.top + (i * innerHeight / 5);
+                            const value = ((5 - i) / 5 * maxValue).toFixed(0);
+                            return `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#666" font-size="10" font-family="Arial, sans-serif">${value}</text>`;
                         }).join('')}
-                        
-                        <!-- Right Y-axis labels (Rand) -->
-                        ${Array.from({length: 5}, (_, i) => {
-                            const y = padding.top + (i * innerHeight / 4);
-                            const amountValue = ((4 - i) / 4 * maxAmount).toFixed(0);
-                            return `<text x="${chartWidth - padding.right + 8}" y="${y + 4}" text-anchor="start" fill="#2196F3" font-size="10" font-weight="500" font-family="Arial, sans-serif">R${amountValue}</text>`;
-                        }).join('')}
-                        
-                        <!-- Y-axis titles -->
-                        <text x="20" y="${chartHeight / 2}" text-anchor="middle" fill="#4CAF50" font-size="11" font-weight="600" font-family="Arial, sans-serif" transform="rotate(-90 20 ${chartHeight / 2})">kWh Usage</text>
-                        <text x="${chartWidth - 20}" y="${chartHeight / 2}" text-anchor="middle" fill="#2196F3" font-size="11" font-weight="600" font-family="Arial, sans-serif" transform="rotate(90 ${chartWidth - 20} ${chartHeight / 2})">Amount (R)</text>
                     </svg>
                     
                     <div class="chart-legend">
@@ -428,13 +418,13 @@
             chartContainer.innerHTML = chartHtml;
             
             // Add tooltip functionality
-            addChartTooltips(sortedData, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxKwh, maxAmount);
+            addChartTooltips(sortedData, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxValue);
             
             // Add loading animation
             animateChart();
         }
         
-        function addChartTooltips(data, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxKwh, maxAmount) {
+        function addChartTooltips(data, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxValue) {
             const svg = document.querySelector('#consumptionChart svg');
             if (!svg) return;
             
@@ -460,8 +450,8 @@
             // Add invisible hover areas for each data point
             data.forEach((d, i) => {
                 const x = padding.left + (i * innerWidth / Math.max(1, data.length - 1));
-                const kwhY = padding.top + innerHeight - (d.kwh / maxKwh * innerHeight);
-                const amountY = padding.top + innerHeight - (d.amount / maxAmount * innerHeight);
+                const kwhY = padding.top + innerHeight - (d.kwh / maxValue * innerHeight);
+                const amountY = padding.top + innerHeight - (d.amount / maxValue * innerHeight);
                 const monthName = new Date(d.month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
                 
                 // Create hover areas for both data points
