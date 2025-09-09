@@ -6,22 +6,33 @@
     <title>Login - Electricity Tracker</title>
     <link rel="stylesheet" href="/css/styles.css">
     <style>
+        body {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
         .auth-container {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            min-height: 100vh !important;
+            width: 100% !important;
+            max-width: 450px !important;
             padding: 20px !important;
         }
+        .auth-brand {
+            text-align: center !important;
+            margin-bottom: 20px !important;
+        }
         .auth-card {
-            max-width: 450px !important;
             width: 100% !important;
-            margin: 0 auto !important;
         }
     </style>
 </head>
-<body>
+<body class="auth-page">
     <div class="auth-container">
         <div class="auth-brand">
             <h1>⚡ Electricity Tracker</h1>

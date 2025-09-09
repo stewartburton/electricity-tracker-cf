@@ -415,6 +415,140 @@
             `;
             
             chartContainer.innerHTML = chartHtml;
+            
+            // Add tooltip functionality
+            addChartTooltips(sortedData, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxKwh, maxAmount);
+            
+            // Add loading animation
+            animateChart();
+        }
+        
+        function addChartTooltips(data, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxKwh, maxAmount) {
+            const svg = document.querySelector('#consumptionChart svg');
+            if (!svg) return;
+            
+            // Create tooltip element
+            const tooltip = document.createElement('div');
+            tooltip.id = 'chartTooltip';
+            tooltip.style.cssText = `
+                position: absolute;
+                background: rgba(0,0,0,0.9);
+                color: white;
+                padding: 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                pointer-events: none;
+                opacity: 0;
+                transition: all 0.2s ease;
+                z-index: 1000;
+                white-space: nowrap;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            `;
+            document.body.appendChild(tooltip);
+            
+            // Add invisible hover areas for each data point
+            data.forEach((d, i) => {
+                const x = padding.left + (i * innerWidth / Math.max(1, data.length - 1));
+                const kwhY = padding.top + innerHeight - (d.kwh / maxKwh * innerHeight);
+                const amountY = padding.top + innerHeight - (d.amount / maxAmount * innerHeight);
+                const monthName = new Date(d.month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                
+                // Create hover areas for both data points
+                const kwhHover = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                kwhHover.setAttribute('cx', x);
+                kwhHover.setAttribute('cy', kwhY);
+                kwhHover.setAttribute('r', '15');
+                kwhHover.setAttribute('fill', 'transparent');
+                kwhHover.style.cursor = 'pointer';
+                
+                const amountHover = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                amountHover.setAttribute('cx', x);
+                amountHover.setAttribute('cy', amountY);
+                amountHover.setAttribute('r', '15');
+                amountHover.setAttribute('fill', 'transparent');
+                amountHover.style.cursor = 'pointer';
+                
+                // kWh hover events
+                kwhHover.addEventListener('mouseenter', (e) => {
+                    tooltip.innerHTML = \`<strong>\${monthName}</strong><br/>⚡ Usage: \${d.kwh.toFixed(1)} kWh\`;
+                    tooltip.style.opacity = '1';
+                });
+                
+                kwhHover.addEventListener('mousemove', (e) => {
+                    const rect = svg.getBoundingClientRect();
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                });
+                
+                kwhHover.addEventListener('mouseleave', () => {
+                    tooltip.style.opacity = '0';
+                });
+                
+                // Amount hover events
+                amountHover.addEventListener('mouseenter', (e) => {
+                    tooltip.innerHTML = \`<strong>\${monthName}</strong><br/>💰 Spent: \${ET.utils.formatCurrency(d.amount)}\`;
+                    tooltip.style.opacity = '1';
+                });
+                
+                amountHover.addEventListener('mousemove', (e) => {
+                    const rect = svg.getBoundingClientRect();
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                });
+                
+                amountHover.addEventListener('mouseleave', () => {
+                    tooltip.style.opacity = '0';
+                });
+                
+                svg.appendChild(kwhHover);
+                svg.appendChild(amountHover);
+            });
+        }
+        
+        function animateChart() {
+            const svg = document.querySelector('#consumptionChart svg');
+            if (!svg) return;
+            
+            // Find all path elements (lines)
+            const paths = svg.querySelectorAll('path[stroke]');
+            const dataPoints = svg.querySelectorAll('.data-point');
+            
+            paths.forEach((path, index) => {
+                if (path.getAttribute('stroke') === '#2196F3' || path.getAttribute('stroke') === '#4CAF50') {
+                    const pathLength = path.getTotalLength();
+                    path.style.strokeDasharray = pathLength;
+                    path.style.strokeDashoffset = pathLength;
+                    
+                    // Animate the line drawing
+                    path.style.transition = \`stroke-dashoffset \${1 + index * 0.3}s ease-in-out\`;
+                    setTimeout(() => {
+                        path.style.strokeDashoffset = '0';
+                    }, 200 + index * 200);
+                }
+            });
+            
+            // Animate data points
+            dataPoints.forEach((point, index) => {
+                point.style.opacity = '0';
+                point.style.transform = 'scale(0)';
+                point.style.transition = 'all 0.3s ease-out';
+                
+                setTimeout(() => {
+                    point.style.opacity = '1';
+                    point.style.transform = 'scale(1)';
+                }, 800 + index * 100);
+            });
+            
+            // Animate area fills
+            const areaFills = svg.querySelectorAll('path[fill*="Gradient"]');
+            areaFills.forEach((area, index) => {
+                area.style.opacity = '0';
+                area.style.transition = 'opacity 0.6s ease-out';
+                
+                setTimeout(() => {
+                    area.style.opacity = index === 0 ? '0.2' : '0.15';
+                }, 1200 + index * 200);
+            });
         }
     </script>
 </body>
