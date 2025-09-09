@@ -470,7 +470,7 @@
                 
                 // kWh hover events
                 kwhHover.addEventListener('mouseenter', (e) => {
-                    tooltip.innerHTML = \`<strong>\${monthName}</strong><br/>⚡ Usage: \${d.kwh.toFixed(1)} kWh\`;
+                    tooltip.innerHTML = `<strong>${monthName}</strong><br/>⚡ Usage: ${d.kwh.toFixed(1)} kWh`;
                     tooltip.style.opacity = '1';
                 });
                 
@@ -486,7 +486,7 @@
                 
                 // Amount hover events
                 amountHover.addEventListener('mouseenter', (e) => {
-                    tooltip.innerHTML = \`<strong>\${monthName}</strong><br/>💰 Spent: \${ET.utils.formatCurrency(d.amount)}\`;
+                    tooltip.innerHTML = `<strong>${monthName}</strong><br/>💰 Spent: ${ET.utils.formatCurrency(d.amount)}`;
                     tooltip.style.opacity = '1';
                 });
                 
@@ -520,7 +520,7 @@
                     path.style.strokeDashoffset = pathLength;
                     
                     // Animate the line drawing
-                    path.style.transition = \`stroke-dashoffset \${1 + index * 0.3}s ease-in-out\`;
+                    path.style.transition = `stroke-dashoffset ${1 + index * 0.3}s ease-in-out`;
                     setTimeout(() => {
                         path.style.strokeDashoffset = '0';
                     }, 200 + index * 200);
