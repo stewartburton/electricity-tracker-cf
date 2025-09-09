@@ -85,11 +85,6 @@
     <div class="history-container">
         <div class="history-header">
             <h1>📋 Transaction History</h1>
-            <div class="history-buttons">
-                <button class="history-btn active">📋 Show All Data</button>
-                <button class="history-btn">💳 Add Voucher</button>
-                <button class="history-btn">📊 Add Reading</button>
-            </div>
         </div>
         
         <div class="history-tabs">
@@ -184,8 +179,8 @@
         if (!ET.auth.checkAuth()) {
             // User will be redirected to login
         } else {
-            loadTransactions();
             setupFilters();
+            loadTransactions();
         }
         
         function setupFilters() {

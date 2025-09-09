@@ -202,6 +202,39 @@ app.use('/api/dashboard/*', authMiddleware);
 app.use('/api/account/*', authMiddleware);
 app.use('/api/transactions', authMiddleware);
 
+// Create reading endpoint
+app.post('/api/readings', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const { reading_value, reading_date, notes } = await c.req.json();
+
+    // Validate required fields
+    if (!reading_value || !reading_date) {
+      return c.json({ error: 'Reading value and date are required' }, 400);
+    }
+
+    // Insert new reading
+    const result = await db.prepare(`
+      INSERT INTO readings (user_id, reading_value, reading_date, notes, created_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `).bind(user.userId, reading_value, reading_date, notes || null).run();
+
+    if (result.success) {
+      return c.json({ 
+        success: true, 
+        message: 'Reading saved successfully',
+        id: result.meta.last_row_id 
+      });
+    } else {
+      throw new Error('Failed to insert reading');
+    }
+  } catch (error) {
+    console.error('Reading creation error:', error);
+    return c.json({ error: error.message || 'Failed to save reading' }, 500);
+  }
+});
+
 // Dashboard endpoint (legacy compatibility)
 app.get('/api/dashboard', async (c) => {
   try {
@@ -596,41 +629,42 @@ app.get('/api/transactions', async (c) => {
     // Get month filter if provided
     const month = c.req.query('month');
     let dateFilter = '';
+    let readingDateFilter = '';
     
     if (month) {
       dateFilter = `AND strftime('%Y-%m', purchase_date) = '${month}'`;
+      readingDateFilter = `AND strftime('%Y-%m', reading_date) = '${month}'`;
+      console.log(`Filtering by month: ${month}, dateFilter: ${dateFilter}, readingDateFilter: ${readingDateFilter}`);
     }
     
-    const readingDateFilter = month ? `AND strftime('%Y-%m', reading_date) = '${month}'` : '';
-    
-    // Get vouchers - same pattern as dashboard
+    // Get vouchers - use actual purchase_date for timestamp
     const vouchers = await db.prepare(`
       SELECT 
         'voucher' as type,
         id,
         user_id,
         token_number,
+        purchase_date,
         purchase_date as date,
         rand_amount,
         kwh_amount,
         vat_amount,
-        notes,
-        created_at
+        notes
       FROM vouchers 
       WHERE user_id IN (${userIdsStr}) ${dateFilter}
       ORDER BY purchase_date DESC
     `).all();
 
-    // Get readings - same pattern as dashboard
+    // Get readings - use actual reading_date for timestamp
     const readings = await db.prepare(`
       SELECT 
         'reading' as type,
         id,
         user_id,
         reading_value,
+        reading_date,
         reading_date as date,
-        notes,
-        created_at
+        notes
       FROM readings 
       WHERE user_id IN (${userIdsStr}) ${readingDateFilter}
       ORDER BY reading_date DESC

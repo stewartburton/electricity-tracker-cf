@@ -58,6 +58,17 @@
         
     </div>
     
+    <style>
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    </style>
+    
     <script src="/api-config.js"></script>
     <script src="/js/app.js"></script>
     <script>
@@ -77,26 +88,78 @@
             document.getElementById('reading_date').value = now.toISOString().slice(0, 16);
         }
         
+        // Show success message
+        function showSuccessMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'success-message';
+            messageDiv.innerHTML = message;
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+        
+        // Show error message  
+        function showErrorMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'error-message';
+            messageDiv.innerHTML = message;
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #dc3545;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+        
         // Handle form submission
         document.getElementById('readingForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = {
                 reading_value: parseFloat(document.getElementById('reading_value').value),
-                reading_date: document.getElementById('reading_date').value,
-                notes: document.getElementById('notes').value
+                reading_date: document.getElementById('reading_date').value
             };
             
             try {
                 const result = await ET.api.post('/api/readings', formData);
                 
                 if (result) {
-                    alert('Reading saved successfully!');
+                    // Show success message
+                    showSuccessMessage('Reading saved successfully! ✅');
                     document.getElementById('readingForm').reset();
                     setDefaultDateTime();
                 }
             } catch (error) {
-                alert('Error saving reading: ' + error.message);
+                showErrorMessage('Error saving reading: ' + error.message);
             }
         });
         

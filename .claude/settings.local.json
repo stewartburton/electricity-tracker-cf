@@ -15,7 +15,9 @@
       "WebFetch(domain:electricity-tracker.electricity-monitor.workers.dev)",
       "Bash(npx wrangler:*)",
       "Bash(curl:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright:*)"
     ],
     "deny": [],
     "ask": []

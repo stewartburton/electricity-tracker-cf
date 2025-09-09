@@ -57,10 +57,14 @@
     "zod": "^3.22.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "wrangler": "^4.34.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug"
   },
   "repository": {
     "type": "git",

@@ -130,13 +130,31 @@
                 return 'No date';
             }
             
+            // Check if this is a date-only string (YYYY-MM-DD format without time)
+            const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+            if (dateOnlyPattern.test(dateString.trim())) {
+                // For date-only entries, just show the date without time
+                const date = new Date(dateString + 'T00:00:00');
+                return date.toLocaleDateString('en-ZA', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            }
+            
+            // Parse the date - handle both SQL datetime format and ISO format
             let date = new Date(dateString);
             
             // If date is invalid, try different parsing approaches
             if (isNaN(date.getTime())) {
-                // Try parsing as various formats
-                if (typeof dateString === 'string') {
-                    // Try to parse manually if needed
+                // Try parsing SQL datetime format: "2025-09-06 11:36:02"
+                if (typeof dateString === 'string' && dateString.includes(' ')) {
+                    const [datePart, timePart] = dateString.split(' ');
+                    date = new Date(datePart + 'T' + timePart);
+                }
+                
+                // If still invalid, try manual parsing
+                if (isNaN(date.getTime())) {
                     const parts = dateString.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
                     if (parts) {
                         date = new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
@@ -148,28 +166,16 @@
                 }
             }
             
-            // Check if the original string was just a date (no time component)
-            const isDateOnly = dateString && dateString.length === 10 && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
-            
-            if (isDateOnly) {
-                // For date-only entries, just show the date without time
-                return date.toLocaleDateString('en-ZA', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-            } else {
-                // For entries with time, show both date and time
-                return date.toLocaleDateString('en-ZA', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                }) + ', ' + date.toLocaleTimeString('en-ZA', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-            }
+            // Always show both date and time for datetime entries
+            return date.toLocaleDateString('en-ZA', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }) + ', ' + date.toLocaleTimeString('en-ZA', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         },
         
         showMessage: function(message, type = 'info') {

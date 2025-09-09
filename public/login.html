@@ -30,45 +30,7 @@
                 </form>
                 
                 <div class="auth-links">
-                    <p>Don't have an account? <a href="#" id="showRegister">Register here</a></p>
-                </div>
-            </div>
-            
-            <!-- Registration Form -->
-            <div id="registerForm" class="auth-form" style="display: none;">
-                <h2>Register</h2>
-                <form id="registerFormElement">
-                    <div class="form-group">
-                        <label for="regEmail">Email Address</label>
-                        <input type="email" id="regEmail" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="regPassword">Password</label>
-                        <input type="password" id="regPassword" minlength="6" required>
-                        <small>Must be at least 6 characters</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="registrationMethod">Registration Method</label>
-                        <select id="registrationMethod" onchange="toggleRegistrationFields()">
-                            <option value="key">Registration Key</option>
-                            <option value="invite">Household Invite Code</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="registrationKeyGroup">
-                        <label for="registrationKey">Registration Key</label>
-                        <input type="text" id="registrationKey">
-                        <small>Enter admin registration key</small>
-                    </div>
-                    <div class="form-group" id="inviteCodeGroup" style="display: none;">
-                        <label for="inviteCode">Household Invite Code</label>
-                        <input type="text" id="inviteCode" placeholder="e.g., STU-KRISY-2025">
-                        <small>Enter the invite code shared by your household member</small>
-                    </div>
-                    <button type="submit" class="primary-btn">🔐 Register</button>
-                </form>
-                
-                <div class="auth-links">
-                    <p>Already have an account? <a href="#" id="showLogin">Login here</a></p>
+                    <p>Don't have an account? <a href="/register">Register here</a></p>
                 </div>
             </div>
         </div>
@@ -125,100 +87,7 @@
                 });
             }
             
-            // Registration form handler
-            const registerFormElement = document.getElementById('registerFormElement');
-            if (registerFormElement) {
-                registerFormElement.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const email = document.getElementById('regEmail').value;
-                    const password = document.getElementById('regPassword').value;
-                    const method = document.getElementById('registrationMethod').value;
-                    
-                    if (!email || !password) {
-                        alert('Please enter both email and password');
-                        return;
-                    }
-                    
-                    if (password.length < 6) {
-                        alert('Password must be at least 6 characters long');
-                        return;
-                    }
-                    
-                    let registrationData = { email, password };
-                    
-                    if (method === 'key') {
-                        const registrationKey = document.getElementById('registrationKey').value;
-                        if (!registrationKey) {
-                            alert('Please enter a registration key');
-                            return;
-                        }
-                        registrationData.registrationKey = registrationKey;
-                    } else if (method === 'invite') {
-                        const inviteCode = document.getElementById('inviteCode').value;
-                        if (!inviteCode) {
-                            alert('Please enter an invite code');
-                            return;
-                        }
-                        registrationData.inviteCode = inviteCode;
-                    }
-                    
-                    try {
-                        const data = await ET.api.post('/api/auth/register', registrationData);
-                        
-                        if (data && data.success) {
-                            ET.auth.setToken(data.token);
-                            ET.auth.setUser(data.user);
-                            window.location.href = '/dashboard';
-                        } else {
-                            alert('Registration failed: ' + (data?.error || 'Unknown error'));
-                        }
-                    } catch (error) {
-                        console.error('Registration error:', error);
-                        alert(error.message || 'Registration failed');
-                    }
-                });
-            }
-            
-            // Form switching handlers
-            const showRegisterBtn = document.getElementById('showRegister');
-            const showLoginBtn = document.getElementById('showLogin');
-            
-            if (showRegisterBtn) {
-                showRegisterBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    document.getElementById('loginForm').style.display = 'none';
-                    document.getElementById('registerForm').style.display = 'block';
-                });
-            }
-            
-            if (showLoginBtn) {
-                showLoginBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    document.getElementById('registerForm').style.display = 'none';
-                    document.getElementById('loginForm').style.display = 'block';
-                });
-            }
         });
-        
-        // Toggle registration fields based on method
-        function toggleRegistrationFields() {
-            const method = document.getElementById('registrationMethod').value;
-            const keyGroup = document.getElementById('registrationKeyGroup');
-            const inviteGroup = document.getElementById('inviteCodeGroup');
-            
-            if (method === 'key') {
-                keyGroup.style.display = 'block';
-                inviteGroup.style.display = 'none';
-                document.getElementById('registrationKey').required = true;
-                document.getElementById('inviteCode').required = false;
-            } else {
-                keyGroup.style.display = 'none';
-                inviteGroup.style.display = 'block';
-                document.getElementById('registrationKey').required = false;
-                document.getElementById('inviteCode').required = true;
-            }
-        }
     </script>
 </body>
 </html>

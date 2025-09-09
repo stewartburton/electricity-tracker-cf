@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="/css/styles.css">
     <style>
         .consumption-chart {
-            padding: 15px;
-            min-height: 320px;
+            padding: 10px;
+            min-height: 400px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -20,9 +20,9 @@
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            padding: 20px;
+            padding: 15px;
             width: 100%;
-            max-width: 500px;
+            max-width: 100%;
         }
         .professional-chart svg {
             max-width: 100%;
@@ -294,10 +294,10 @@
             const maxKwh = Math.max(...sortedData.map(m => m.kwh)) * 1.1;
             const maxAmount = Math.max(...sortedData.map(m => m.amount)) * 1.1;
             
-            // Chart dimensions - make it larger to fill the container
-            const chartWidth = 450;
-            const chartHeight = 220;
-            const padding = { top: 25, right: 40, bottom: 50, left: 50 };
+            // Chart dimensions - make it much larger to fill the container
+            const chartWidth = 600;
+            const chartHeight = 300;
+            const padding = { top: 30, right: 50, bottom: 60, left: 60 };
             const innerWidth = chartWidth - padding.left - padding.right;
             const innerHeight = chartHeight - padding.top - padding.bottom;
             
