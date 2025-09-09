@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - Electricity Tracker</title>
     <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .auth-container {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 100vh !important;
+            padding: 20px !important;
+        }
+        .auth-card {
+            max-width: 450px !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+        }
+    </style>
 </head>
 <body>
     <div class="auth-container">
@@ -36,8 +51,8 @@
                     </div>
                     <div class="form-group" id="registrationKeyGroup">
                         <label for="registrationKey">Registration Key</label>
-                        <input type="text" id="registrationKey" placeholder="STU-KRISY-2025">
-                        <small>Use "STU-KRISY-2025" to create a new account</small>
+                        <input type="text" id="registrationKey" placeholder="Enter registration key">
+                        <small>Contact administrator for registration key</small>
                     </div>
                     <div class="form-group" id="inviteCodeGroup" style="display: none;">
                         <label for="inviteCode">Household Invite Code</label>
