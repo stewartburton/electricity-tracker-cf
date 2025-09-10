@@ -58,6 +58,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "tailwindcss": "^4.1.13",
     "wrangler": "^4.34.0"
   },
   "scripts": {

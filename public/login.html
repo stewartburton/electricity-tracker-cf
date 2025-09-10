@@ -5,59 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Electricity Tracker</title>
     <link rel="stylesheet" href="/css/styles.css">
-    <style>
-        body {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            min-height: 100vh !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        .auth-container {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 100% !important;
-            max-width: 450px !important;
-            padding: 20px !important;
-        }
-        .auth-brand {
-            text-align: center !important;
-            margin-bottom: 20px !important;
-        }
-        .auth-card {
-            width: 100% !important;
-        }
-    </style>
 </head>
 <body class="auth-page">
     <div class="auth-container">
-        <div class="auth-brand">
-            <h1>⚡ Electricity Tracker</h1>
-            <p>Track your prepaid electricity usage</p>
-        </div>
-        
         <div class="auth-card">
-            <!-- Login Form -->
-            <div id="loginForm" class="auth-form">
+            <h1>⚡ Electricity Tracker</h1>
+            <p class="tagline">Track your prepaid electricity usage</p>
+            
+            <form id="loginFormElement" class="auth-form">
                 <h2>Login</h2>
-                <form id="loginFormElement">
-                    <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input type="email" id="email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" required>
-                    </div>
-                    <button type="submit" class="primary-btn">🔓 Log In</button>
-                </form>
                 
-                <div class="auth-links">
-                    <p>Don't have an account? <a href="/register">Register here</a></p>
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" required>
                 </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <button type="submit" class="primary-btn">🔓 Log In</button>
+            </form>
+            
+            <div class="auth-switch">
+                <p>Don't have an account? <a href="/register">Register here</a></p>
             </div>
         </div>
     </div>

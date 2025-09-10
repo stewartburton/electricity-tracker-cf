@@ -9,11 +9,17 @@
 <body>
     <nav>
         <div class="nav-brand">⚡ Electricity Tracker</div>
-        <div class="nav-links">
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
             <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
             <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
             <a href="/reading" class="nav-btn active">📊 Add Reading</a>
             <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
             <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
         </div>
     </nav>
@@ -161,6 +167,26 @@
             } catch (error) {
                 showErrorMessage('Error saving reading: ' + error.message);
             }
+        });
+        
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+        
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+                
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
         });
         
     </script>

@@ -742,7 +742,20 @@ app.post('/api/account/change-password', async (c) => {
   }
 });
 
-// Serve static files from public directory
-app.get('*', serveStatic({ root: './public' }));
+// Serve static files from public directory - exclude API routes
+app.get('/css/*', serveStatic({ root: './public' }));
+app.get('/js/*', serveStatic({ root: './public' }));
+app.get('/images/*', serveStatic({ root: './public' }));
+app.get('/favicon.ico', serveStatic({ root: './public' }));
+
+// Serve HTML pages
+app.get('/', serveStatic({ path: './public/index.html' }));
+app.get('/login', serveStatic({ path: './public/login.html' }));
+app.get('/register', serveStatic({ path: './public/register.html' }));
+app.get('/dashboard', serveStatic({ path: './public/dashboard.html' }));
+app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
+app.get('/reading', serveStatic({ path: './public/reading.html' }));
+app.get('/history', serveStatic({ path: './public/history.html' }));
+app.get('/settings', serveStatic({ path: './public/settings.html' }));
 
 export default app;
