@@ -99,7 +99,7 @@ tests/
 
 ### Authentication Tests (`auth.spec.js`)
 
-- User registration with registration key "STU-KRISY-2025"
+- User registration with environment variable registration key
 - User registration with invite codes
 - User login with valid/invalid credentials
 - Authentication redirects for protected pages
@@ -153,7 +153,7 @@ The test suite is configured to:
 - **Unique Test Emails**: Each test generates unique email addresses using timestamps
 - **Secure Passwords**: Tests use dynamically generated secure passwords
 - **Automatic Cleanup**: All test data is tracked and cleaned up automatically
-- **Registration Key**: Tests use the valid registration key "STU-KRISY-2025"
+- **Registration Key**: Tests use environment variable TEST_REGISTRATION_KEY
 
 ## 📊 Test Reports
 

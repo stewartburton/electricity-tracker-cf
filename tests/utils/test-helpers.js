@@ -8,7 +8,7 @@ class TestHelpers {
   constructor(page) {
     this.page = page;
     this.baseURL = 'https://electricity-tracker.electricity-monitor.workers.dev';
-    this.registrationKey = 'STU-KRISY-2025';
+    this.registrationKey = process.env.TEST_REGISTRATION_KEY || 'test-key-placeholder';
   }
 
   /**
