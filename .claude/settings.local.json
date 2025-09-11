@@ -17,7 +17,18 @@
       "Bash(curl:*)",
       "Bash(node:*)",
       "Bash(npm install:*)",
-      "Bash(npx playwright:*)"
+      "Bash(npx playwright:*)",
+      "Bash(find:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(git checkout:*)",
+      "Bash(gh api:*)",
+      "Bash(cat:*)",
+      "Bash(pnpm dlx shadcn@latest add:*)",
+      "Bash(timeout 10 pnpm dlx shadcn@latest init)",
+      "WebFetch(domain:tweakcn.com)",
+      "WebFetch(domain:ui.aceternity.com)"
     ],
     "deny": [],
     "ask": []
