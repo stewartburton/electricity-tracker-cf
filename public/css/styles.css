@@ -8,9 +8,16 @@
 /* Amber Minimal Theme Variables */
 :root {
   /* Fonts */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-serif: 'Source Serif 4', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+               'Noto Color Emoji', 'EmojiOne Color', 'Android Emoji',
+               'Twemoji Mozilla', sans-serif;
+  --font-serif: 'Source Serif 4', Georgia,
+                'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+                'Noto Color Emoji', serif;
+  --font-mono: 'JetBrains Mono', 'Courier New',
+               'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+               'Noto Color Emoji', monospace;
   
   /* Primary Colors - Light Theme */
   --background: oklch(1.0000 0 0);
@@ -329,6 +336,21 @@ h3 {
   margin-bottom: 1rem;
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+/* Emoji Support Enhancement */
+h1, h2, h3, .page-title, .tab-btn, .nav-btn, .stat-icon, .type-badge {
+  font-variant-emoji: emoji;
+  -webkit-font-feature-settings: "liga" 1, "kern" 1;
+  font-feature-settings: "liga" 1, "kern" 1;
+}
+
+/* Force emoji presentation for critical elements */
+.emoji, [data-emoji], .dashboard-title, .history-title {
+  font-variant-emoji: emoji !important;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+               'Noto Color Emoji', 'EmojiOne Color', 'Android Emoji',
+               'Twemoji Mozilla', var(--font-sans) !important;
 }
 
 /* Forms */
