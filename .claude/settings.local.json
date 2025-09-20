@@ -28,7 +28,9 @@
       "Bash(pnpm dlx shadcn@latest add:*)",
       "Bash(timeout 10 pnpm dlx shadcn@latest init)",
       "WebFetch(domain:tweakcn.com)",
-      "WebFetch(domain:ui.aceternity.com)"
+      "WebFetch(domain:ui.aceternity.com)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)"
     ],
     "deny": [],
     "ask": []
