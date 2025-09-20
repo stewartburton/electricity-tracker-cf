@@ -221,10 +221,10 @@ app.post('/api/readings', async (c) => {
     `).bind(user.userId, reading_value, reading_date, notes || null).run();
 
     if (result.success) {
-      return c.json({ 
-        success: true, 
+      return c.json({
+        success: true,
         message: 'Reading saved successfully',
-        id: result.meta.last_row_id 
+        id: result.meta.last_row_id
       });
     } else {
       throw new Error('Failed to insert reading');
@@ -232,6 +232,131 @@ app.post('/api/readings', async (c) => {
   } catch (error) {
     console.error('Reading creation error:', error);
     return c.json({ error: error.message || 'Failed to save reading' }, 500);
+  }
+});
+
+// Delete reading endpoint
+app.delete('/api/readings/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const { id } = c.req.param();
+
+    if (!id) {
+      return c.json({ error: 'Reading ID is required' }, 400);
+    }
+
+    // First check if reading exists and belongs to user
+    const reading = await db.prepare(`
+      SELECT * FROM readings WHERE id = ? AND user_id = ?
+    `).bind(id, user.userId).first();
+
+    if (!reading) {
+      return c.json({
+        success: false,
+        error: 'Reading not found or access denied'
+      }, 404);
+    }
+
+    // Delete the reading
+    const result = await db.prepare(`
+      DELETE FROM readings WHERE id = ? AND user_id = ?
+    `).bind(id, user.userId).run();
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: 'Reading deleted successfully',
+        deletedId: parseInt(id)
+      });
+    } else {
+      throw new Error('Failed to delete reading');
+    }
+  } catch (error) {
+    console.error('Error deleting reading:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to delete reading'
+    }, 500);
+  }
+});
+
+// Create voucher endpoint
+app.post('/api/vouchers', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const { token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes } = await c.req.json();
+
+    // Validate required fields
+    if (!token_number || !purchase_date || !rand_amount || !kwh_amount) {
+      return c.json({ error: 'Token number, purchase date, rand amount, and kWh amount are required' }, 400);
+    }
+
+    // Insert new voucher
+    const result = await db.prepare(`
+      INSERT INTO vouchers (user_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).bind(user.userId, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: 'Voucher saved successfully',
+        id: result.meta.last_row_id
+      });
+    } else {
+      throw new Error('Failed to insert voucher');
+    }
+  } catch (error) {
+    console.error('Voucher creation error:', error);
+    return c.json({ error: error.message || 'Failed to save voucher' }, 500);
+  }
+});
+
+// Delete voucher endpoint
+app.delete('/api/vouchers/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const { id } = c.req.param();
+
+    if (!id) {
+      return c.json({ error: 'Voucher ID is required' }, 400);
+    }
+
+    // First check if voucher exists and belongs to user
+    const voucher = await db.prepare(`
+      SELECT * FROM vouchers WHERE id = ? AND user_id = ?
+    `).bind(id, user.userId).first();
+
+    if (!voucher) {
+      return c.json({
+        success: false,
+        error: 'Voucher not found or access denied'
+      }, 404);
+    }
+
+    // Delete the voucher
+    const result = await db.prepare(`
+      DELETE FROM vouchers WHERE id = ? AND user_id = ?
+    `).bind(id, user.userId).run();
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: 'Voucher deleted successfully',
+        deletedId: parseInt(id)
+      });
+    } else {
+      throw new Error('Failed to delete voucher');
+    }
+  } catch (error) {
+    console.error('Error deleting voucher:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to delete voucher'
+    }, 500);
   }
 });
 
