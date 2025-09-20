@@ -68,6 +68,121 @@
             font-size: 1.2rem !important;
             font-weight: 600 !important;
         }
+
+        /* Delete button styling */
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-delete:hover {
+            background-color: #c82333;
+        }
+
+        .btn-delete:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        /* Modal styling */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: #dc3545;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile responsiveness for delete buttons */
+        @media (max-width: 768px) {
+            .btn-delete {
+                padding: 6px 10px;
+                font-size: 10px;
+            }
+
+            .modal-content {
+                margin: 20px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -117,14 +232,15 @@
                             <th>AMOUNT/VALUE</th>
                             <th>UNITS/USAGE</th>
                             <th>NOTES</th>
+                            <th>ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody id="historyTableBody">
                         <!-- Pre-allocate space to prevent layout shift -->
-                        <tr><td colspan="6" style="text-align: center; padding: 40px; color: #999;">Loading transactions...</td></tr>
-                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
-                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
-                        <tr style="height: 400px; visibility: hidden;"><td colspan="6">&nbsp;</td></tr>
+                        <tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">Loading transactions...</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -171,9 +287,27 @@
                 </div>
             </div>
         </div>
-        
+
     </div>
-    
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p id="deleteConfirmText">Are you sure you want to delete this item?</p>
+            <div class="modal-actions">
+                <button id="cancelDelete" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDelete" class="btn btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Deleting...</p>
+    </div>
+
     <script src="/api-config.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/theme-effects.js"></script>
@@ -268,7 +402,7 @@
                 console.error('Error loading transactions:', error);
                 const tableBody = document.getElementById('historyTableBody');
                 if (tableBody) {
-                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #e53e3e;">Error loading transactions</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #e53e3e;">Error loading transactions</td></tr>';
                 }
             }
         }
@@ -334,7 +468,7 @@
                 // Show no transactions message in table
                 const tableBody = document.getElementById('historyTableBody');
                 if (tableBody) {
-                    tableBody.innerHTML = '<tr><td colspan="6">No transactions found</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="7">No transactions found</td></tr>';
                 }
                 return;
             }
@@ -347,7 +481,7 @@
             const tableBody = document.getElementById('historyTableBody');
             
             if (transactions.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="6">No transactions found</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="7">No transactions found</td></tr>';
                 return;
             }
             
@@ -361,6 +495,7 @@
                             <td>${ET.utils.formatCurrency(t.rand_amount)}</td>
                             <td>${t.kwh_amount} kWh</td>
                             <td>${t.notes || '-'}</td>
+                            <td><button class="btn-delete" onclick="showDeleteConfirmation(${t.id}, 'voucher')" title="Delete voucher">🗑️</button></td>
                         </tr>
                     `;
                 } else {
@@ -372,6 +507,7 @@
                             <td>-</td>
                             <td>${t.reading_value} kWh</td>
                             <td>${t.notes || '-'}</td>
+                            <td><button class="btn-delete" onclick="showDeleteConfirmation(${t.id}, 'reading')" title="Delete reading">🗑️</button></td>
                         </tr>
                     `;
                 }
@@ -392,7 +528,108 @@
                 }
             }
         }
-        
+
+        // Delete functionality
+        let deleteItemId = null;
+        let deleteItemType = null;
+
+        // Get description for confirmation dialog
+        function getItemDescription(item, type) {
+            if (type === 'reading') {
+                return `meter reading of ${item.reading_value} kWh from ${new Date(item.date).toLocaleDateString()}`;
+            } else {
+                return `voucher of ${ET.utils.formatCurrency(item.rand_amount)} from ${new Date(item.date).toLocaleDateString()}`;
+            }
+        }
+
+        // Show delete confirmation modal
+        function showDeleteConfirmation(id, type) {
+            deleteItemId = id;
+            deleteItemType = type;
+
+            // Find the item in our data arrays to get the description
+            let item = null;
+            if (type === 'voucher') {
+                item = allVouchers.find(v => v.id === id);
+            } else {
+                item = allReadings.find(r => r.id === id);
+            }
+
+            const description = item ? getItemDescription(item, type) : `${type}`;
+
+            document.getElementById('deleteConfirmText').textContent =
+                `Are you sure you want to delete this ${description}? This action cannot be undone.`;
+
+            document.getElementById('deleteConfirmModal').style.display = 'flex';
+        }
+
+        // Hide delete confirmation modal
+        function hideDeleteConfirmation() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
+            deleteItemId = null;
+            deleteItemType = null;
+        }
+
+        // Perform the actual delete
+        async function performDelete() {
+            if (!deleteItemId || !deleteItemType) return;
+
+            // Show loading overlay
+            document.getElementById('loadingOverlay').style.display = 'flex';
+
+            try {
+                const endpoint = deleteItemType === 'reading' ? 'readings' : 'vouchers';
+                const response = await ET.api.delete(`/api/${endpoint}/${deleteItemId}`);
+
+                if (response && response.success) {
+                    // Show success message
+                    showNotification('Item deleted successfully', 'success');
+
+                    // Refresh the history display
+                    loadTransactions();
+                } else {
+                    showNotification(response?.error || 'Failed to delete item', 'error');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showNotification('An error occurred while deleting', 'error');
+            } finally {
+                // Hide loading overlay and modal
+                document.getElementById('loadingOverlay').style.display = 'none';
+                hideDeleteConfirmation();
+            }
+        }
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.textContent = message;
+
+            // Style the notification
+            Object.assign(notification.style, {
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                padding: '12px 20px',
+                backgroundColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff',
+                color: 'white',
+                borderRadius: '4px',
+                zIndex: '1002',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+            });
+
+            document.body.appendChild(notification);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+
         // Hamburger menu functionality
         document.getElementById('hamburgerMenu').addEventListener('click', function() {
             const navLinks = document.getElementById('navLinks');
@@ -407,9 +644,32 @@
             link.addEventListener('click', function() {
                 const navLinks = document.getElementById('navLinks');
                 const hamburgerMenu = document.getElementById('hamburgerMenu');
-                
+
                 navLinks.classList.remove('active');
                 hamburgerMenu.classList.remove('active');
+            });
+        });
+
+        // Event listeners for modal
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cancel delete button
+            document.getElementById('cancelDelete').addEventListener('click', hideDeleteConfirmation);
+
+            // Confirm delete button
+            document.getElementById('confirmDelete').addEventListener('click', performDelete);
+
+            // Close modal when clicking outside
+            document.getElementById('deleteConfirmModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    hideDeleteConfirmation();
+                }
+            });
+
+            // ESC key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && document.getElementById('deleteConfirmModal').style.display === 'flex') {
+                    hideDeleteConfirmation();
+                }
             });
         });
     </script>
