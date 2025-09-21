@@ -206,27 +206,40 @@ class CloudflareEmailService {
 
   // Resend.com integration (free tier: 3000 emails/month)
   async sendViaResend(to, subject, htmlContent, textContent) {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: `${this.fromName} <${this.fromEmail}>`,
-        to: [to],
-        subject: subject,
-        html: htmlContent,
-        text: textContent || this.htmlToText(htmlContent)
-      })
-    });
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${this.fromName} <${this.fromEmail}>`,
+          to: [to],
+          subject: subject,
+          html: htmlContent,
+          text: textContent || this.htmlToText(htmlContent)
+        })
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Resend API error: ${error}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Resend API error response:', errorText);
+        return {
+          success: false,
+          error: `Resend API error (${response.status}): ${errorText}`
+        };
+      }
+
+      const data = await response.json();
+      return { success: true, data: data };
+    } catch (error) {
+      console.error('Resend API fetch error:', error);
+      return {
+        success: false,
+        error: `Failed to send email via Resend: ${error.message}`
+      };
     }
-
-    return { success: true, data: await response.json() };
   }
 
   // Mailgun integration (free tier: 5000 emails/month)
@@ -274,27 +287,53 @@ class CloudflareEmailService {
   async sendFamilyInvitation(invitationData) {
     const template = this.getTemplate('family-invitation.html');
     const htmlContent = this.renderTemplate(template, invitationData);
+    const textContent = this.htmlToText(htmlContent);
 
     const subject = `You're invited to join ${invitationData.senderName}'s PowerMeter family account!`;
 
-    return await this.sendEmail(
+    const result = await this.sendEmail(
       invitationData.recipientEmail,
       subject,
-      htmlContent
+      htmlContent,
+      textContent
     );
+
+    // Return format expected by the API
+    return {
+      success: result.success,
+      error: result.error,
+      subject: subject,
+      htmlBody: htmlContent,
+      textBody: textContent,
+      messageId: result.data?.id || 'unknown',
+      threadId: result.data?.id || 'unknown'
+    };
   }
 
   async sendNewAccountInvitation(invitationData) {
     const template = this.getTemplate('new-account-invitation.html');
     const htmlContent = this.renderTemplate(template, invitationData);
+    const textContent = this.htmlToText(htmlContent);
 
     const subject = `${invitationData.senderName} recommends PowerMeter for electricity tracking`;
 
-    return await this.sendEmail(
+    const result = await this.sendEmail(
       invitationData.recipientEmail,
       subject,
-      htmlContent
+      htmlContent,
+      textContent
     );
+
+    // Return format expected by the API
+    return {
+      success: result.success,
+      error: result.error,
+      subject: subject,
+      htmlBody: htmlContent,
+      textBody: textContent,
+      messageId: result.data?.id || 'unknown',
+      threadId: result.data?.id || 'unknown'
+    };
   }
 }
 
