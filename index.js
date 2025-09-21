@@ -3,6 +3,7 @@ import { serveStatic } from 'hono/cloudflare-workers';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import CloudflareEmailService from './services/cloudflareEmailService.js';
 
 const app = new Hono();
 
@@ -1073,6 +1074,334 @@ app.get('/api/export/data', async (c) => {
   } catch (error) {
     console.error('Export error:', error);
     return c.json({ error: 'Failed to export data' }, 500);
+  }
+});
+
+// Email Invitation Endpoints
+
+// Send family invitation via email
+app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { email, personalMessage } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Validate admin role
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to send family invitations' }, 403);
+    }
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return c.json({ error: 'Valid email address is required' }, 400);
+    }
+
+    // Check if user already exists and is in the tenant
+    const existingUser = await db.prepare(`
+      SELECT u.id, tu.tenant_id
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id AND tu.tenant_id = ?
+      WHERE u.email = ?
+    `).bind(tenant.id, email).first();
+
+    if (existingUser && existingUser.tenant_id) {
+      return c.json({ error: 'User is already a member of this family account' }, 400);
+    }
+
+    // Generate invite code
+    const inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
+
+    // Create invite code record
+    const inviteResult = await db.prepare(`
+      INSERT INTO invite_codes (tenant_id, code, created_by, expires_at, max_uses, current_uses, is_active)
+      VALUES (?, ?, ?, ?, 1, 0, 1)
+    `).bind(
+      tenant.id,
+      inviteCode,
+      user.userId,
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    ).run();
+
+    if (!inviteResult.success) {
+      return c.json({ error: 'Failed to create invitation' }, 500);
+    }
+
+    // Create email invitation record (temporary - will be updated after email sending)
+    const emailInvitationResult = await db.prepare(`
+      INSERT INTO email_invitations (
+        tenant_id, sent_by_user_id, invitation_type, recipient_email,
+        invite_code, email_subject, email_body_html, email_body_text,
+        expires_at
+      ) VALUES (?, ?, 'family', ?, ?, 'temp', 'temp', 'temp', ?)
+    `).bind(
+      tenant.id,
+      user.userId,
+      email,
+      inviteCode,
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    ).run();
+
+    const emailInvitationId = emailInvitationResult.meta.last_row_id;
+
+    // Send email
+    const emailService = new CloudflareEmailService(c.env);
+    const emailResult = await emailService.sendFamilyInvitation({
+      recipientEmail: email,
+      senderName: user.name || user.email,
+      senderEmail: user.email,
+      inviteCode,
+      tenantName: tenant.name,
+      personalMessage,
+      emailInvitationId
+    });
+
+    if (!emailResult.success) {
+      console.error('Email sending failed:', emailResult.error);
+      return c.json({ error: 'Failed to send invitation email: ' + emailResult.error }, 500);
+    }
+
+    // Update email invitation record with actual content
+    await db.prepare(`
+      UPDATE email_invitations
+      SET email_subject = ?, email_body_html = ?, email_body_text = ?,
+          metadata = ?
+      WHERE id = ?
+    `).bind(
+      emailResult.subject,
+      emailResult.htmlBody,
+      emailResult.textBody,
+      JSON.stringify({ messageId: emailResult.messageId, threadId: emailResult.threadId }),
+      emailInvitationId
+    ).run();
+
+    // Update invite_codes with email reference
+    await db.prepare(`
+      UPDATE invite_codes
+      SET email_invitation_id = ?, sent_via_email = 1
+      WHERE code = ?
+    `).bind(emailInvitationId, inviteCode).run();
+
+    return c.json({
+      success: true,
+      message: 'Family invitation sent successfully',
+      inviteCode,
+      recipientEmail: email,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      emailInvitationId
+    });
+
+  } catch (error) {
+    console.error('Family invitation error:', error);
+    return c.json({ error: 'Failed to send family invitation' }, 500);
+  }
+});
+
+// Send new account invitation via email
+app.post('/api/invitations/new-account', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { email, personalMessage } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return c.json({ error: 'Valid email address is required' }, 400);
+    }
+
+    // Check if user already exists
+    const existingUser = await db.prepare(`
+      SELECT id FROM users WHERE email = ?
+    `).bind(email).first();
+
+    if (existingUser) {
+      return c.json({ error: 'User with this email already has an account' }, 400);
+    }
+
+    // Generate referral code
+    const referralCode = `REF_${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+
+    // Create email invitation record
+    const emailInvitationResult = await db.prepare(`
+      INSERT INTO email_invitations (
+        tenant_id, sent_by_user_id, invitation_type, recipient_email,
+        referral_code, email_subject, email_body_html, email_body_text
+      ) VALUES (?, ?, 'new_account', ?, ?, 'temp', 'temp', 'temp')
+    `).bind(tenant.id, user.userId, email, referralCode).run();
+
+    const emailInvitationId = emailInvitationResult.meta.last_row_id;
+
+    // Send email
+    const emailService = new CloudflareEmailService(c.env);
+    const emailResult = await emailService.sendNewAccountInvitation({
+      recipientEmail: email,
+      senderName: user.name || user.email,
+      referralCode,
+      personalMessage,
+      emailInvitationId
+    });
+
+    if (!emailResult.success) {
+      console.error('Email sending failed:', emailResult.error);
+      return c.json({ error: 'Failed to send invitation email: ' + emailResult.error }, 500);
+    }
+
+    // Update email invitation record with actual content
+    await db.prepare(`
+      UPDATE email_invitations
+      SET email_subject = ?, email_body_html = ?, email_body_text = ?,
+          metadata = ?
+      WHERE id = ?
+    `).bind(
+      emailResult.subject,
+      emailResult.htmlBody,
+      emailResult.textBody,
+      JSON.stringify({ messageId: emailResult.messageId, threadId: emailResult.threadId }),
+      emailInvitationId
+    ).run();
+
+    return c.json({
+      success: true,
+      message: 'New account invitation sent successfully',
+      referralCode,
+      recipientEmail: email,
+      emailInvitationId
+    });
+
+  } catch (error) {
+    console.error('New account invitation error:', error);
+    return c.json({ error: 'Failed to send new account invitation' }, 500);
+  }
+});
+
+// Get sent invitations
+app.get('/api/invitations', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    const invitations = await db.prepare(`
+      SELECT
+        ei.*,
+        ic.expires_at as invite_expires_at,
+        ic.current_uses as invite_current_uses,
+        ic.max_uses as invite_max_uses,
+        ic.is_active as invite_is_active
+      FROM email_invitations ei
+      LEFT JOIN invite_codes ic ON ei.invite_code = ic.code
+      WHERE ei.tenant_id = ?
+      ORDER BY ei.sent_at DESC
+    `).bind(tenant.id).all();
+
+    return c.json({
+      success: true,
+      invitations: invitations.results || []
+    });
+
+  } catch (error) {
+    console.error('Get invitations error:', error);
+    return c.json({ error: 'Failed to get invitations' }, 500);
+  }
+});
+
+// Email tracking endpoints
+
+// Track email opens
+app.get('/api/invitations/track/open/:emailId', async (c) => {
+  try {
+    const emailId = c.req.param('emailId');
+    const db = c.env.DB;
+
+    // Update opened status
+    await db.prepare(`
+      UPDATE email_invitations
+      SET status = 'opened', opened_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'sent'
+    `).bind(emailId).run();
+
+    // Return 1x1 transparent pixel
+    const pixel = new Uint8Array([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+      0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+      0x42, 0x60, 0x82
+    ]);
+
+    return new Response(pixel, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+  } catch (error) {
+    console.error('Email tracking error:', error);
+    return new Response('', { status: 200 });
+  }
+});
+
+// Track email clicks
+app.get('/api/invitations/track/click/:emailId', async (c) => {
+  try {
+    const emailId = c.req.param('emailId');
+    const db = c.env.DB;
+
+    // Update clicked status
+    await db.prepare(`
+      UPDATE email_invitations
+      SET status = 'clicked', clicked_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(emailId).run();
+
+    // Redirect to registration
+    return c.redirect('/register');
+
+  } catch (error) {
+    console.error('Click tracking error:', error);
+    return c.redirect('/register');
+  }
+});
+
+// Unsubscribe from emails
+app.get('/api/invitations/unsubscribe/:emailId', async (c) => {
+  try {
+    const emailId = c.req.param('emailId');
+    const db = c.env.DB;
+
+    // Mark as unsubscribed (you could add an unsubscribed table)
+    await db.prepare(`
+      UPDATE email_invitations
+      SET metadata = json_set(COALESCE(metadata, '{}'), '$.unsubscribed', true, '$.unsubscribed_at', CURRENT_TIMESTAMP)
+      WHERE id = ?
+    `).bind(emailId).run();
+
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Unsubscribed - PowerMeter</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .container { max-width: 500px; margin: 0 auto; }
+          h1 { color: #c27d18; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>⚡ PowerMeter</h1>
+          <h2>You've been unsubscribed</h2>
+          <p>You will no longer receive invitation emails from PowerMeter.</p>
+          <p><a href="/">Back to PowerMeter</a></p>
+        </div>
+      </body>
+      </html>
+    `);
+
+  } catch (error) {
+    console.error('Unsubscribe error:', error);
+    return c.text('Error processing unsubscribe request', 500);
   }
 });
 

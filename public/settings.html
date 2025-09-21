@@ -103,6 +103,63 @@
             </form>
         </div>
 
+        <!-- Email Invitations Section -->
+        <div class="card">
+            <h2>✉️ Email Invitations</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Invite people to PowerMeter via email. Send family invitations to join your household or new account invitations for referrals.
+            </p>
+
+            <!-- Send Invitation Forms -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;" class="invitation-forms-grid">
+                <div class="form-card" style="padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h3>👨‍👩‍👧‍👦 Family Invitation</h3>
+                    <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Invite someone to join your household group
+                    </p>
+                    <form id="sendFamilyInviteForm">
+                        <div class="form-group">
+                            <label for="familyEmail">Email Address:</label>
+                            <input type="email" id="familyEmail" placeholder="friend@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="familyMessage">Personal Message (optional):</label>
+                            <textarea id="familyMessage" placeholder="Hey! I'd love to share our electricity tracking with you..." rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="primary-btn" style="width: 100%;">Send Family Invite</button>
+                    </form>
+                </div>
+
+                <div class="form-card" style="padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h3>🌟 New Account Invitation</h3>
+                    <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Refer someone to create their own PowerMeter account
+                    </p>
+                    <form id="sendNewAccountInviteForm">
+                        <div class="form-group">
+                            <label for="newAccountEmail">Email Address:</label>
+                            <input type="email" id="newAccountEmail" placeholder="friend@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newAccountMessage">Personal Message (optional):</label>
+                            <textarea id="newAccountMessage" placeholder="I think you'd love PowerMeter for tracking your electricity usage..." rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="primary-btn" style="width: 100%;">Send Referral Invite</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Sent Invitations List -->
+            <div style="border-top: 1px solid #e5e7eb; padding-top: 20px;">
+                <h3>📬 Sent Invitations</h3>
+                <div id="sentInvitationsList">
+                    <div style="text-align: center; color: #666; padding: 20px;">
+                        Loading sent invitations...
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Group Management -->
         <div class="card" id="groupManagementSection" style="display: none;">
             <div id="groupManagementContent">
@@ -362,8 +419,133 @@
                 }
             });
 
+            // Email invitation functions
+            async function loadSentInvitations() {
+                try {
+                    const data = await ET.api.get('/api/invitations');
+                    if (data && data.success) {
+                        displaySentInvitations(data.data);
+                    }
+                } catch (error) {
+                    console.error('Failed to load sent invitations:', error);
+                    document.getElementById('sentInvitationsList').innerHTML = `
+                        <div style="text-align: center; color: #dc3545; padding: 20px;">
+                            Failed to load sent invitations
+                        </div>
+                    `;
+                }
+            }
+
+            function displaySentInvitations(invitations) {
+                const container = document.getElementById('sentInvitationsList');
+
+                if (!invitations || invitations.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #666; padding: 20px;">
+                            No invitations sent yet
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '<div class="recent-list">';
+                invitations.forEach(invitation => {
+                    const statusColor = invitation.status === 'sent' ? '#28a745' :
+                                      invitation.status === 'opened' ? '#ffc107' :
+                                      invitation.status === 'clicked' ? '#17a2b8' : '#6c757d';
+
+                    const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' : '🌟 Referral';
+
+                    html += `
+                        <div class="recent-item" style="align-items: flex-start;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 5px;">
+                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}</span>
+                                    <span style="color: ${statusColor}; font-size: 12px; padding: 2px 8px; background: ${statusColor}20; border-radius: 12px;">
+                                        ${invitation.status.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div style="font-size: 12px; color: #666;">
+                                    Sent: ${new Date(invitation.sent_at).toLocaleDateString()}
+                                    ${invitation.opened_at ? ` • Opened: ${new Date(invitation.opened_at).toLocaleDateString()}` : ''}
+                                    ${invitation.clicked_at ? ` • Clicked: ${new Date(invitation.clicked_at).toLocaleDateString()}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+
+                container.innerHTML = html;
+            }
+
+            // Family invitation form handler
+            document.getElementById('sendFamilyInviteForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('familyEmail').value;
+                const personalMessage = document.getElementById('familyMessage').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+
+                // Disable button and show loading
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Sending...';
+
+                try {
+                    const data = await ET.api.post('/api/invitations/family', {
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    });
+
+                    if (data && data.success) {
+                        alert('Family invitation sent successfully!');
+                        document.getElementById('sendFamilyInviteForm').reset();
+                        loadSentInvitations(); // Refresh the list
+                    }
+                } catch (error) {
+                    console.error('Send family invitation error:', error);
+                    alert(error.message || 'Failed to send family invitation');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Send Family Invite';
+                }
+            });
+
+            // New account invitation form handler
+            document.getElementById('sendNewAccountInviteForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('newAccountEmail').value;
+                const personalMessage = document.getElementById('newAccountMessage').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+
+                // Disable button and show loading
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Sending...';
+
+                try {
+                    const data = await ET.api.post('/api/invitations/new-account', {
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    });
+
+                    if (data && data.success) {
+                        alert('Referral invitation sent successfully!');
+                        document.getElementById('sendNewAccountInviteForm').reset();
+                        loadSentInvitations(); // Refresh the list
+                    }
+                } catch (error) {
+                    console.error('Send new account invitation error:', error);
+                    alert(error.message || 'Failed to send referral invitation');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Send Referral Invite';
+                }
+            });
+
             // Load initial data
             loadAccountInfo();
+            loadSentInvitations();
             
             // Hamburger menu functionality
             document.getElementById('hamburgerMenu').addEventListener('click', function() {

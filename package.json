@@ -22,6 +22,7 @@
     "exit-hook": "^2.2.1",
     "exsolve": "^1.0.7",
     "glob-to-regexp": "^0.4.1",
+    "googleapis": "^160.0.0",
     "hono": "^4.9.6",
     "is-arrayish": "^0.3.2",
     "jsonwebtoken": "^9.0.2",

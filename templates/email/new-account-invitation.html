@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{senderName}} recommends PowerMeter for electricity tracking</title>
+    <style>
+        /* Reset styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* Container styles */
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #c27d18 0%, #a16d13 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            border-radius: 12px 12px 0 0;
+        }
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        /* Content */
+        .content {
+            padding: 40px 30px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+        }
+        .content h2 {
+            color: #111827;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .content p {
+            margin-bottom: 16px;
+            color: #374151;
+        }
+
+        /* Features grid */
+        .features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 24px 0;
+        }
+        .feature {
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #c27d18;
+        }
+        .feature h4 {
+            color: #111827;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .feature p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 0;
+        }
+
+        /* Button */
+        .button {
+            background: #c27d18;
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 24px 0;
+            font-weight: 600;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        .button:hover {
+            background: #a16d13;
+        }
+
+        /* Benefits list */
+        .benefits {
+            margin: 24px 0;
+            padding: 0;
+            list-style: none;
+        }
+        .benefits li {
+            padding: 8px 0;
+            color: #374151;
+            font-size: 15px;
+        }
+
+        /* Testimonial */
+        .testimonial {
+            background: #f0f9ff;
+            border-left: 4px solid #0ea5e9;
+            padding: 20px;
+            margin: 24px 0;
+            border-radius: 0 8px 8px 0;
+            font-style: italic;
+        }
+        .testimonial p {
+            color: #0c4a6e;
+            margin-bottom: 8px;
+        }
+        .testimonial .author {
+            font-weight: 600;
+            font-style: normal;
+            color: #0369a1;
+        }
+
+        /* Stats */
+        .stats {
+            background: #fefce8;
+            border: 1px solid #facc15;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 24px 0;
+            text-align: center;
+        }
+        .stats p {
+            color: #713f12;
+            margin-bottom: 0;
+            font-weight: 600;
+        }
+
+        /* Footer */
+        .footer {
+            background: #f9fafb;
+            padding: 30px;
+            font-size: 14px;
+            color: #6b7280;
+            text-align: center;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+        }
+        .footer a {
+            color: #c27d18;
+            text-decoration: none;
+        }
+        .footer p {
+            margin-bottom: 8px;
+        }
+
+        /* Mobile responsiveness */
+        @media only screen and (max-width: 600px) {
+            .container { margin: 10px; }
+            .header, .content, .footer { padding: 20px; }
+            .header h1 { font-size: 24px; }
+            .content h2 { font-size: 20px; }
+            .features { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ PowerMeter</h1>
+            <p>Smart Electricity Tracking</p>
+        </div>
+
+        <div class="content">
+            <h2>{{senderName}} thinks you'd love PowerMeter!</h2>
+
+            <p>Hi there!</p>
+
+            <p><strong>{{senderName}}</strong> thinks you'd benefit from PowerMeter - South Africa's leading electricity usage tracking platform.</p>
+
+            {{#if personalMessage}}
+            <div class="testimonial">
+                <p>"{{personalMessage}}"</p>
+                <div class="author">— {{senderName}}</div>
+            </div>
+            {{/if}}
+
+            <div class="features">
+                <div class="feature">
+                    <h4>📊 Smart Analytics</h4>
+                    <p>Track consumption trends and spending patterns</p>
+                </div>
+                <div class="feature">
+                    <h4>📱 SMS Integration</h4>
+                    <p>Import vouchers directly from FNB SMS</p>
+                </div>
+                <div class="feature">
+                    <h4>👨‍👩‍👧‍👦 Family Accounts</h4>
+                    <p>Share tracking with household members</p>
+                </div>
+                <div class="feature">
+                    <h4>📈 Monthly Reports</h4>
+                    <p>Detailed consumption and cost analysis</p>
+                </div>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{registrationUrl}}" class="button">Start Tracking Your Electricity Usage</a>
+            </div>
+
+            <p style="text-align: center; font-size: 14px; color: #6b7280;">
+                Free to get started • No credit card required
+            </p>
+
+            <div class="stats">
+                <p>Join thousands of South African families already saving on electricity with PowerMeter</p>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+
+            <h3 style="color: #111827; margin-bottom: 16px;">Why PowerMeter?</h3>
+            <ul class="benefits">
+                <li>🇿🇦 Built specifically for South African prepaid electricity</li>
+                <li>⚡ Track voucher purchases and meter readings effortlessly</li>
+                <li>📊 Understand your consumption patterns with detailed analytics</li>
+                <li>💰 Optimize your electricity spending and reduce waste</li>
+                <li>👨‍👩‍👧‍👦 Manage family usage together with shared accounts</li>
+                <li>📱 Import vouchers directly from FNB SMS messages</li>
+            </ul>
+
+            <p>Start your journey to smarter electricity management today!</p>
+        </div>
+
+        <div class="footer">
+            <p>Recommended by <strong>{{senderName}}</strong> via PowerMeter</p>
+            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> • <a href="https://powermeter.app">PowerMeter.app</a></p>
+            <p>PowerMeter - Smart Electricity Tracking for South African Families</p>
+        </div>
+    </div>
+
+    <!-- Tracking pixel -->
+    <img src="{{trackingPixelUrl}}" width="1" height="1" style="display:none;" alt="">
+</body>
+</html>
