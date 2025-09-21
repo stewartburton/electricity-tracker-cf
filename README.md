@@ -1,6 +1,6 @@
 # ⚡ Electricity Tracker - Cloudflare Workers Edition
 
-A modern web application for tracking prepaid electricity usage, built with Cloudflare Workers and D1 database. Features a beautiful amber-themed UI with interactive 3D effects, animated backgrounds, and comprehensive household management.
+A modern **multi-tenant SaaS application** for tracking prepaid electricity usage, built with Cloudflare Workers and D1 database. Features a beautiful amber-themed UI with interactive 3D effects, animated backgrounds, and comprehensive family account management with invite codes and data export.
 
 ![Electricity Tracker Dashboard](https://img.shields.io/badge/Status-Active-green) 
 ![Cloudflare Workers](https://img.shields.io/badge/Platform-Cloudflare%20Workers-orange)
@@ -67,7 +67,8 @@ electricity-tracker-cf/
 │       ├── app.js            # Core frontend JavaScript
 │       └── theme-effects.js  # Background beams & 3D card effects
 ├── migrations/
-│   └── 001_init.sql          # Database schema
+│   ├── 001_multi_tenant.sql  # Multi-tenant database schema
+│   └── 002_invite_codes.sql  # Invite codes table
 ├── tests/
 │   └── test.spec.js          # Playwright tests
 ├── package.json              # Dependencies
@@ -89,7 +90,9 @@ electricity-tracker-cf/
 ### 🔧 Core Functionality
 
 - ✅ **User Authentication** - Secure login/register system with JWT tokens
-- ✅ **Household Management** - Create and join household groups to share data
+- ✅ **Multi-Tenant Architecture** - Complete data isolation between family accounts
+- ✅ **Invite Code System** - Secure family member onboarding with expirable codes
+- ✅ **Data Export** - GDPR-compliant data export for user data portability
 - ✅ **Voucher Management** - Track electricity voucher purchases with full details
 - ✅ **SMS Import** - Quick voucher entry from FNB SMS messages with smart parsing
 - ✅ **Meter Readings** - Record and track electricity meter readings over time
@@ -108,11 +111,13 @@ electricity-tracker-cf/
 - `POST /api/auth/login` - User login
 
 #### Account Management
-- `GET /api/account/info` - Get account and household information
+- `GET /api/account/info` - Get account and tenant information
 - `POST /api/account/change-password` - Change user password
-- `POST /api/account/create-group` - Create new household group
-- `POST /api/account/join-group` - Join existing household group
-- `POST /api/account/leave-group` - Leave current household group
+
+#### Tenant Management
+- `POST /api/tenants/invite` - Generate invite code for family members
+- `POST /api/tenants/join` - Join family account using invite code
+- `GET /api/export/data` - Export all tenant data (GDPR compliant)
 
 #### Vouchers
 - `GET /api/vouchers` - List vouchers (household-aware)
@@ -248,13 +253,94 @@ npx wrangler d1 execute electricity-tracker-db --sql=".schema"
 - **Detailed Tables** - Sortable columns with comprehensive data
 - **Export Options** - Data export capabilities
 
-#### Account Settings
-- **Household Groups** - Create or join household accounts for data sharing
+#### Family Account Management
+- **Multi-Tenant Architecture** - Complete data isolation between family accounts
+- **Invite Code System** - Generate secure invite codes for family members
+  - Configurable expiration dates (default: 7 days)
+  - Usage limits and tracking
+  - Automatic code generation with crypto-secure randomness
+- **Data Export** - GDPR-compliant export of all family account data
+  - JSON format with complete transaction history
+  - Includes vouchers, readings, and account information
+  - One-click download functionality
 - **Password Management** - Secure password changes with validation
-- **Account Linking** - Invite codes and group management
-- **Profile Information** - Account details and preferences
+- **Tenant Administration** - Family account admins can manage members
 
-## 🔄 Recent Updates (v3.0)
+## 🔄 Recent Updates (v4.0 - Multi-Tenant SaaS)
+
+### 🏢 Multi-Tenant Architecture
+- ✅ **Complete Data Isolation** - Tenant-based data segregation with automatic filtering
+- ✅ **Invite Code System** - Secure family member onboarding with configurable expiration
+- ✅ **GDPR Data Export** - Complete user data portability and compliance
+- ✅ **Auto-Tenant Creation** - New users automatically get their own family account
+- ✅ **Database Migration** - Seamless migration from single-user to multi-tenant
+- ✅ **Tenant Middleware** - Automatic tenant isolation for all API endpoints
+
+### 🛡️ Security & Data Protection
+The application now implements enterprise-grade multi-tenancy with:
+
+#### Tenant Isolation
+- **Database Level**: All data tables include `tenant_id` for automatic filtering
+- **Middleware Level**: Tenant context automatically applied to all API requests
+- **Frontend Level**: Users only see data belonging to their family account
+- **Complete Separation**: Zero data leakage between family accounts
+
+#### Invite Code Security
+- **Crypto-Secure Generation**: Uses Node.js crypto.randomBytes for code generation
+- **Expiration Control**: Configurable expiration dates (default 7 days)
+- **Usage Tracking**: Limits and monitoring for invite code usage
+- **Admin Controls**: Only family admins can generate invite codes
+
+#### Data Export Compliance
+- **GDPR Compliant**: Complete user data portability
+- **JSON Format**: Structured export including all vouchers, readings, and account data
+- **Audit Trail**: Export actions are logged for compliance
+- **Secure Download**: Direct browser download with proper headers
+
+### 🔧 Technical Implementation
+
+#### Database Schema
+```sql
+-- Core multi-tenant tables
+CREATE TABLE tenants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    subscription_status TEXT DEFAULT 'active',
+    max_users INTEGER DEFAULT 5
+);
+
+CREATE TABLE tenant_users (
+    tenant_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'member', -- 'admin', 'member'
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    UNIQUE(tenant_id, user_id)
+);
+
+CREATE TABLE invite_codes (
+    tenant_id INTEGER NOT NULL,
+    code TEXT UNIQUE NOT NULL,
+    created_by INTEGER NOT NULL,
+    expires_at DATETIME,
+    max_uses INTEGER DEFAULT 1,
+    current_uses INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT 1
+);
+
+-- All existing tables now include tenant_id
+ALTER TABLE vouchers ADD COLUMN tenant_id INTEGER;
+ALTER TABLE readings ADD COLUMN tenant_id INTEGER;
+```
+
+#### Automatic Migration Process
+1. **Backup Creation**: Automatic database backup before migration
+2. **Schema Updates**: Add multi-tenant tables and columns
+3. **Data Migration**: Convert existing users to individual tenants
+4. **Index Creation**: Performance optimization indexes
+5. **Verification**: Complete data integrity checks
+
+## 🔄 Previous Updates (v3.0)
 
 ### 🎨 Major UI Overhaul
 - ✅ **Amber Theme Implementation** - Complete redesign with OKLCH color system
@@ -264,11 +350,14 @@ npx wrangler d1 execute electricity-tracker-db --sql=".schema"
 - ✅ **Theme Effects System** - Modular JavaScript for consistent animations
 
 ### 🚀 Feature Enhancements
-- ✅ **Household Management** - Create and join household groups for data sharing
+- ✅ **Multi-Tenant SaaS Architecture** - Complete transformation to commercial-ready platform
+- ✅ **Invite Code System** - Secure family member onboarding with expirable codes
+- ✅ **Data Export Functionality** - GDPR-compliant data portability
+- ✅ **Tenant Isolation** - Complete data separation between family accounts
+- ✅ **Auto-Tenant Creation** - Seamless onboarding for new users
 - ✅ **Smart Chart Scaling** - Proportional chart scaling to show true differences
 - ✅ **Tooltip Positioning** - Smart boundary detection for chart tooltips
 - ✅ **SMS Parsing** - Enhanced FNB SMS parsing with better error handling
-- ✅ **Account Settings** - Complete password management and group controls
 
 ### 🛠️ Technical Improvements
 - ✅ **CSS Variable System** - Consistent theming with CSS custom properties
@@ -320,7 +409,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated**: September 2025  
-**Status**: ✅ Active Development  
-**Version**: 3.0.0 - Amber Theme & Interactive Effects Release  
+**Last Updated**: September 2025
+**Status**: ✅ Production Ready
+**Version**: 4.0.0 - Multi-Tenant SaaS Platform Release  
 **Live Demo**: [electricity-tracker.electricity-monitor.workers.dev](https://electricity-tracker.electricity-monitor.workers.dev)
