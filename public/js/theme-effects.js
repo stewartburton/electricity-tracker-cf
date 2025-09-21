@@ -35,38 +35,19 @@ function initBackgroundBeams() {
     }
 }
 
-// Comet Card 3D Effect
+// Comet Card Mouse Tracking (for subtle glow effect)
 function initCometCards() {
     const cards = document.querySelectorAll('.comet-card');
-    
+
     cards.forEach(card => {
         card.addEventListener('mousemove', (e) => {
             const rect = card.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            
-            const rotateX = (y - centerY) / centerY * -17.5;
-            const rotateY = (x - centerX) / centerX * 17.5;
-            
-            const translateX = (x - centerX) / centerX * 20;
-            const translateY = (y - centerY) / centerY * -20;
-            
-            card.style.setProperty('--rotate-x', `${rotateX}deg`);
-            card.style.setProperty('--rotate-y', `${rotateY}deg`);
-            card.style.setProperty('--translate-x', `${translateX}px`);
-            card.style.setProperty('--translate-y', `${translateY}px`);
+
+            // Only track mouse position for glow effect
             card.style.setProperty('--mouse-x', `${(x / rect.width) * 100}%`);
             card.style.setProperty('--mouse-y', `${(y / rect.height) * 100}%`);
-        });
-        
-        card.addEventListener('mouseleave', () => {
-            card.style.setProperty('--rotate-x', '0deg');
-            card.style.setProperty('--rotate-y', '0deg');
-            card.style.setProperty('--translate-x', '0px');
-            card.style.setProperty('--translate-y', '0px');
         });
     });
 }

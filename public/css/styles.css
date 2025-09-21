@@ -276,10 +276,8 @@ nav {
   padding: 1.5rem;
   position: relative;
   overflow: hidden;
-  cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: var(--shadow-sm);
-  transform-style: preserve-3d;
 }
 
 .comet-card::before {
@@ -302,10 +300,8 @@ nav {
 }
 
 .comet-card:hover {
-  transform: scale(1.02) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) 
-             translateX(var(--translate-x, 0px)) translateY(var(--translate-y, 0px));
+  transform: scale(1.01);
   box-shadow: var(--shadow-lg);
-  z-index: 10;
 }
 
 /* Headings */
