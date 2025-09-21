@@ -1,16 +1,16 @@
 name = "electricity-tracker"
 main = "index.js"
-compatibility_date = "2024-09-05"
+compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-
-[assets]
-directory = "./public"
 
 # Custom domain routes
 routes = [
-  { pattern = "powermeter.app/*", custom_domain = true },
-  { pattern = "www.powermeter.app/*", custom_domain = true }
+  { pattern = "powermeter.app", custom_domain = true },
+  { pattern = "www.powermeter.app", custom_domain = true }
 ]
+
+[assets]
+directory = "./public"
 
 # Environment variables
 [env.production.vars]
@@ -26,21 +26,16 @@ database_id = "fbcc393d-4801-4fd1-a090-5dca1fa3ee92"
 # Secrets (use 'wrangler secret put' to set these)
 # JWT_SECRET - Set via: wrangler secret put JWT_SECRET
 
-# Worker analytics
-[analytics_engine_datasets]
-# Add if you want to use analytics engine
+# Worker analytics (uncomment to enable)
+# [[analytics_engine_datasets]]
+# binding = "AE"
 
 # Optional: KV namespace bindings (if you use KV storage)
 # [[kv_namespaces]]
 # binding = "MY_KV_NAMESPACE"
 # id = "your-kv-namespace-id"
 
-# Build configuration
-[build]
-command = ""  # Add build command if needed
-cwd = ""      # Change if your code is in a subdirectory
-
-# Local development
-[local]
-port = 8787
-ip = "127.0.0.1"
+# Build configuration (uncomment to enable)
+# [build]
+# command = ""  # Add build command if needed
+# cwd = ""      # Change if your code is in a subdirectory
