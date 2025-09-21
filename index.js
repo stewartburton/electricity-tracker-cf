@@ -18,19 +18,55 @@ app.use('*', cors({
 // Auth middleware
 const authMiddleware = async (c, next) => {
   const authHeader = c.req.header('Authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return c.json({ error: 'Authentication required' }, 401);
   }
 
   const token = authHeader.split(' ')[1];
-  
+
   try {
     const decoded = jwt.verify(token, c.env.JWT_SECRET);
     c.set('user', decoded);
     await next();
   } catch (error) {
     return c.json({ error: 'Invalid token' }, 401);
+  }
+};
+
+// Tenant middleware for multi-tenant data isolation
+const tenantMiddleware = async (c, next) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const db = c.env.DB;
+
+    // Get user's tenant
+    const tenantUser = await db.prepare(`
+      SELECT t.*, tu.role
+      FROM tenants t
+      JOIN tenant_users tu ON t.id = tu.tenant_id
+      WHERE tu.user_id = ?
+    `).bind(user.userId).first();
+
+    if (!tenantUser) {
+      return c.json({ error: 'No tenant access' }, 403);
+    }
+
+    c.set('tenant', {
+      id: tenantUser.id,
+      name: tenantUser.name,
+      role: tenantUser.role,
+      subscription_status: tenantUser.subscription_status
+    });
+
+    await next();
+  } catch (error) {
+    console.error('Tenant middleware error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
   }
 };
 
@@ -196,16 +232,17 @@ async function getSharedUserIds(db, userId) {
 }
 
 // Protected routes
-app.use('/api/readings/*', authMiddleware);
-app.use('/api/vouchers/*', authMiddleware);
-app.use('/api/dashboard/*', authMiddleware);
+app.use('/api/readings/*', authMiddleware, tenantMiddleware);
+app.use('/api/vouchers/*', authMiddleware, tenantMiddleware);
+app.use('/api/dashboard/*', authMiddleware, tenantMiddleware);
+app.use('/api/transactions', authMiddleware, tenantMiddleware);
 app.use('/api/account/*', authMiddleware);
-app.use('/api/transactions', authMiddleware);
 
 // Create reading endpoint
 app.post('/api/readings', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { reading_value, reading_date, notes } = await c.req.json();
 
@@ -214,11 +251,11 @@ app.post('/api/readings', async (c) => {
       return c.json({ error: 'Reading value and date are required' }, 400);
     }
 
-    // Insert new reading
+    // Insert new reading with tenant isolation
     const result = await db.prepare(`
-      INSERT INTO readings (user_id, reading_value, reading_date, notes, created_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `).bind(user.userId, reading_value, reading_date, notes || null).run();
+      INSERT INTO readings (user_id, tenant_id, reading_value, reading_date, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).bind(user.userId, tenant.id, reading_value, reading_date, notes || null).run();
 
     if (result.success) {
       return c.json({
