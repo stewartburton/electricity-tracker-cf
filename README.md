@@ -1,6 +1,6 @@
 # ⚡ Electricity Tracker - Cloudflare Workers Edition
 
-A modern **multi-tenant SaaS application** for tracking prepaid electricity usage, built with Cloudflare Workers and D1 database. Features a beautiful amber-themed UI with interactive 3D effects, animated backgrounds, and comprehensive family account management with invite codes and data export.
+A modern **multi-tenant SaaS application** for tracking prepaid electricity usage, built with Cloudflare Workers and D1 database. Features a beautiful amber-themed UI with clean hover effects, animated backgrounds, and comprehensive family account management with invite codes and data export.
 
 ![Electricity Tracker Dashboard](https://img.shields.io/badge/Status-Active-green) 
 ![Cloudflare Workers](https://img.shields.io/badge/Platform-Cloudflare%20Workers-orange)
@@ -24,7 +24,7 @@ cd electricity-tracker-cf
 npm install
 
 # Start development server
-npm run dev
+npx wrangler dev
 ```
 
 Visit `http://localhost:8787` to view the application.
@@ -32,7 +32,7 @@ Visit `http://localhost:8787` to view the application.
 ### Deploy to Production
 ```bash
 # Deploy to Cloudflare Workers
-npm run deploy
+npx wrangler deploy
 ```
 
 ## 🔑 Important Information
@@ -65,7 +65,7 @@ electricity-tracker-cf/
 │   │   └── styles.css        # Modern amber theme with animations
 │   └── js/
 │       ├── app.js            # Core frontend JavaScript
-│       └── theme-effects.js  # Background beams & 3D card effects
+│       └── theme-effects.js  # Background beams & clean hover effects
 ├── migrations/
 │   ├── 001_multi_tenant.sql  # Multi-tenant database schema
 │   └── 002_invite_codes.sql  # Invite codes table
@@ -82,7 +82,7 @@ electricity-tracker-cf/
 ### 🎨 Modern UI/UX
 - **Amber-themed design** using OKLCH color space for vibrant, accessible colors
 - **Animated background beams** with SVG gradients and smooth animations
-- **Interactive 3D cards** with mouse tracking and transform effects
+- **Clean card hover effects** with subtle scaling and glow on mouse interaction
 - **Responsive mobile navigation** with hamburger menu for all screen sizes
 - **Glassmorphism effects** with backdrop blur and translucent elements
 - **Professional typography** with proper visual hierarchy and spacing
@@ -165,7 +165,7 @@ electricity-tracker-cf/
 
 ### Local Development
 ```bash
-npm run dev
+npx wrangler dev
 ```
 Access at: http://localhost:8787
 
@@ -209,10 +209,10 @@ npx wrangler d1 execute electricity-tracker-db --sql=".schema"
 - **Glassmorphism Effects** - Translucent cards with backdrop blur
 - **Smooth Animations** - 60fps animations using CSS transforms
 
-#### Interactive 3D Elements
-- **Comet Cards** - Mouse-tracking 3D transform effects on interactive elements
+#### Interactive Elements
+- **Clean Card Effects** - Subtle hover scaling and mouse-tracking glow effects
 - **Background Beams** - Animated SVG gradients with flowing beam effects
-- **Hover Feedback** - Subtle scale and glow effects on interactive elements
+- **Hover Feedback** - Gentle scale and glow effects on interactive elements
 - **Mobile Touch** - Optimized touch interactions for mobile devices
 
 #### Responsive Design
@@ -345,7 +345,7 @@ ALTER TABLE readings ADD COLUMN tenant_id INTEGER;
 ### 🎨 Major UI Overhaul
 - ✅ **Amber Theme Implementation** - Complete redesign with OKLCH color system
 - ✅ **Background Beams** - Animated SVG gradients with flowing light effects
-- ✅ **Interactive 3D Cards** - Mouse-tracking transform effects on all card elements
+- ✅ **Clean Card Hover Effects** - Subtle scaling and glow effects without distracting rotations
 - ✅ **Mobile Navigation** - Hamburger menus implemented across all pages
 - ✅ **Theme Effects System** - Modular JavaScript for consistent animations
 
