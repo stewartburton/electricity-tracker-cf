@@ -181,12 +181,51 @@ app.post('/api/auth/register', async (c) => {
 
     const userId = result.meta.last_row_id;
 
-    // If invite code was used, add user to the group
-    if (groupId) {
+    if (inviteCode) {
+      // Join existing tenant via invite code
+      const invite = await db.prepare(`
+        SELECT * FROM invite_codes
+        WHERE code = ? AND is_active = 1
+        AND expires_at > datetime('now')
+        AND current_uses < max_uses
+      `).bind(inviteCode).first();
+
+      if (invite) {
+        // Add user to existing tenant
+        await db.prepare(`
+          INSERT INTO tenant_users (tenant_id, user_id, role)
+          VALUES (?, ?, 'member')
+        `).bind(invite.tenant_id, userId).run();
+
+        // Update invite usage
+        await db.prepare(`
+          UPDATE invite_codes
+          SET current_uses = current_uses + 1
+          WHERE id = ?
+        `).run(invite.id);
+      } else {
+        // Invalid invite code - create own tenant
+        const tenantResult = await db.prepare(`
+          INSERT INTO tenants (name)
+          VALUES (?)
+        `).bind(`${email}'s Family`).run();
+
+        await db.prepare(`
+          INSERT INTO tenant_users (tenant_id, user_id, role)
+          VALUES (?, ?, 'admin')
+        `).bind(tenantResult.meta.last_row_id, userId).run();
+      }
+    } else {
+      // No invite code - create new tenant for user
+      const tenantResult = await db.prepare(`
+        INSERT INTO tenants (name)
+        VALUES (?)
+      `).bind(`${email}'s Family`).run();
+
       await db.prepare(`
-        INSERT INTO user_groups (user_id, group_id, role)
-        VALUES (?, ?, 'member')
-      `).bind(userId, groupId).run();
+        INSERT INTO tenant_users (tenant_id, user_id, role)
+        VALUES (?, ?, 'admin')
+      `).bind(tenantResult.meta.last_row_id, userId).run();
     }
 
     // Generate JWT token
@@ -236,6 +275,8 @@ app.use('/api/readings/*', authMiddleware, tenantMiddleware);
 app.use('/api/vouchers/*', authMiddleware, tenantMiddleware);
 app.use('/api/dashboard/*', authMiddleware, tenantMiddleware);
 app.use('/api/transactions', authMiddleware, tenantMiddleware);
+app.use('/api/tenants/*', authMiddleware, tenantMiddleware);
+app.use('/api/export/*', authMiddleware, tenantMiddleware);
 app.use('/api/account/*', authMiddleware);
 
 // Create reading endpoint
@@ -901,6 +942,137 @@ app.post('/api/account/change-password', async (c) => {
   } catch (error) {
     console.error('Change password error:', error);
     return c.json({ error: 'Failed to change password' }, 500);
+  }
+});
+
+// Tenant Management Endpoints
+
+// Create invite code
+app.post('/api/tenants/invite', async (c) => {
+  try {
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    // Generate unique invite code
+    const code = Math.random().toString(36).substr(2, 8).toUpperCase();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const result = await db.prepare(`
+      INSERT INTO invite_codes (tenant_id, code, created_by, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).bind(tenant.id, code, user.userId, expiresAt.toISOString()).run();
+
+    return c.json({
+      success: true,
+      code,
+      expires_at: expiresAt,
+      id: result.meta.last_row_id
+    });
+  } catch (error) {
+    console.error('Create invite error:', error);
+    return c.json({ error: 'Failed to create invite code' }, 500);
+  }
+});
+
+// Join tenant via invite code (for existing users)
+app.post('/api/tenants/join', async (c) => {
+  try {
+    const user = c.get('user');
+    const { code } = await c.req.json();
+    const db = c.env.DB;
+
+    // Validate invite code
+    const invite = await db.prepare(`
+      SELECT * FROM invite_codes
+      WHERE code = ? AND is_active = 1
+      AND expires_at > datetime('now')
+      AND current_uses < max_uses
+    `).bind(code).first();
+
+    if (!invite) {
+      return c.json({ error: 'Invalid or expired invite code' }, 400);
+    }
+
+    // Check if user already in this tenant
+    const existing = await db.prepare(`
+      SELECT id FROM tenant_users
+      WHERE tenant_id = ? AND user_id = ?
+    `).bind(invite.tenant_id, user.userId).first();
+
+    if (existing) {
+      return c.json({ error: 'Already member of this tenant' }, 400);
+    }
+
+    // Add user to tenant
+    await db.prepare(`
+      INSERT INTO tenant_users (tenant_id, user_id, role)
+      VALUES (?, ?, 'member')
+    `).bind(invite.tenant_id, user.userId).run();
+
+    // Update invite usage
+    await db.prepare(`
+      UPDATE invite_codes
+      SET current_uses = current_uses + 1
+      WHERE id = ?
+    `).bind(invite.id).run();
+
+    return c.json({ success: true, message: 'Successfully joined tenant' });
+  } catch (error) {
+    console.error('Join tenant error:', error);
+    return c.json({ error: 'Failed to join tenant' }, 500);
+  }
+});
+
+// Export tenant data
+app.get('/api/export/data', async (c) => {
+  try {
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Get all tenant data
+    const vouchers = await db.prepare(`
+      SELECT * FROM vouchers WHERE tenant_id = ?
+    `).bind(tenant.id).all();
+
+    const readings = await db.prepare(`
+      SELECT * FROM readings WHERE tenant_id = ?
+    `).bind(tenant.id).all();
+
+    const tenantInfo = await db.prepare(`
+      SELECT t.*, GROUP_CONCAT(u.email) as members
+      FROM tenants t
+      JOIN tenant_users tu ON t.id = tu.tenant_id
+      JOIN users u ON tu.user_id = u.id
+      WHERE t.id = ?
+      GROUP BY t.id
+    `).bind(tenant.id).first();
+
+    const exportData = {
+      export_date: new Date().toISOString(),
+      tenant: tenantInfo,
+      vouchers: vouchers.results || [],
+      readings: readings.results || [],
+      summary: {
+        total_vouchers: (vouchers.results || []).length,
+        total_readings: (readings.results || []).length,
+        total_amount_spent: (vouchers.results || []).reduce((sum, v) => sum + (v.rand_amount || 0), 0)
+      }
+    };
+
+    // Set headers for download
+    c.header('Content-Type', 'application/json');
+    c.header('Content-Disposition', `attachment; filename="electricity-data-${tenant.id}-${Date.now()}.json"`);
+
+    return c.json(exportData);
+  } catch (error) {
+    console.error('Export error:', error);
+    return c.json({ error: 'Failed to export data' }, 500);
   }
 });
 
