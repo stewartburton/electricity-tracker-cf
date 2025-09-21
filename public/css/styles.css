@@ -345,42 +345,10 @@ h1, h2, h3, .page-title, .tab-btn, .nav-btn, .stat-icon, .type-badge {
   font-feature-settings: "liga" 1, "kern" 1;
 }
 
-/* CSS-based emoji injection with proper Unicode rendering */
-.dashboard-title::before {
-  content: "\1F4CA\FE0F";
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'EmojiOne Color', 'Android Emoji', 'Twemoji Mozilla';
-  font-variant-emoji: emoji;
+/* Font Awesome icon styling for page titles */
+.dashboard-title i, .history-title i, .reading-title i, .voucher-title i {
   margin-right: 0.5rem;
-  font-size: 1em;
-}
-
-.history-title::before {
-  content: "\1F4CB\FE0F";
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'EmojiOne Color', 'Android Emoji', 'Twemoji Mozilla';
-  font-variant-emoji: emoji;
-  margin-right: 0.5rem;
-  font-size: 1em;
-}
-
-.reading-title::before {
-  content: "\1F4CA\FE0F";
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'EmojiOne Color', 'Android Emoji', 'Twemoji Mozilla';
-  font-variant-emoji: emoji;
-  margin-right: 0.5rem;
-  font-size: 1em;
-}
-
-.voucher-title::before {
-  content: "\1F4B3\FE0F";
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'EmojiOne Color', 'Android Emoji', 'Twemoji Mozilla';
-  font-variant-emoji: emoji;
-  margin-right: 0.5rem;
-  font-size: 1em;
-}
-
-/* Force emoji presentation for critical elements */
-.emoji, [data-emoji], .dashboard-title, .history-title, .reading-title, .voucher-title {
-  font-variant-emoji: emoji !important;
+  color: var(--primary);
 }
 
 /* Forms */

@@ -31,7 +31,8 @@
       "WebFetch(domain:ui.aceternity.com)",
       "Bash(git pull:*)",
       "Bash(git branch:*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr create:*)",
+      "WebFetch(domain:127.0.0.1)"
     ],
     "deny": [],
     "ask": []
