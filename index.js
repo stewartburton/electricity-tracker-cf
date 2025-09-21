@@ -1082,7 +1082,8 @@ app.get('/api/export/data', async (c) => {
 // Send family invitation via email
 app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) => {
   try {
-    const { email, personalMessage } = await c.req.json();
+    const { email, recipientEmail, personalMessage } = await c.req.json();
+    const emailToUse = email || recipientEmail;
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
@@ -1093,7 +1094,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     }
 
     // Validate email
-    if (!email || !email.includes('@')) {
+    if (!emailToUse || !emailToUse.includes('@')) {
       return c.json({ error: 'Valid email address is required' }, 400);
     }
 
@@ -1103,7 +1104,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
       FROM users u
       LEFT JOIN tenant_users tu ON u.id = tu.user_id AND tu.tenant_id = ?
       WHERE u.email = ?
-    `).bind(tenant.id, email).first();
+    `).bind(tenant.id, emailToUse).first();
 
     if (existingUser && existingUser.tenant_id) {
       return c.json({ error: 'User is already a member of this family account' }, 400);
@@ -1137,7 +1138,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     `).bind(
       tenant.id,
       user.userId,
-      email,
+      emailToUse,
       inviteCode,
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     ).run();
@@ -1147,7 +1148,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     // Send email
     const emailService = new CloudflareEmailService(c.env);
     const emailResult = await emailService.sendFamilyInvitation({
-      recipientEmail: email,
+      recipientEmail: emailToUse,
       senderName: user.name || user.email,
       senderEmail: user.email,
       inviteCode,
@@ -1200,20 +1201,21 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
 // Send new account invitation via email
 app.post('/api/invitations/new-account', authMiddleware, tenantMiddleware, async (c) => {
   try {
-    const { email, personalMessage } = await c.req.json();
+    const { email, recipientEmail, personalMessage } = await c.req.json();
+    const emailToUse = email || recipientEmail;
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
     // Validate email
-    if (!email || !email.includes('@')) {
+    if (!emailToUse || !emailToUse.includes('@')) {
       return c.json({ error: 'Valid email address is required' }, 400);
     }
 
     // Check if user already exists
     const existingUser = await db.prepare(`
       SELECT id FROM users WHERE email = ?
-    `).bind(email).first();
+    `).bind(emailToUse).first();
 
     if (existingUser) {
       return c.json({ error: 'User with this email already has an account' }, 400);
@@ -1228,14 +1230,14 @@ app.post('/api/invitations/new-account', authMiddleware, tenantMiddleware, async
         tenant_id, sent_by_user_id, invitation_type, recipient_email,
         referral_code, email_subject, email_body_html, email_body_text
       ) VALUES (?, ?, 'new_account', ?, ?, 'temp', 'temp', 'temp')
-    `).bind(tenant.id, user.userId, email, referralCode).run();
+    `).bind(tenant.id, user.userId, emailToUse, referralCode).run();
 
     const emailInvitationId = emailInvitationResult.meta.last_row_id;
 
     // Send email
     const emailService = new CloudflareEmailService(c.env);
     const emailResult = await emailService.sendNewAccountInvitation({
-      recipientEmail: email,
+      recipientEmail: emailToUse,
       senderName: user.name || user.email,
       referralCode,
       personalMessage,
