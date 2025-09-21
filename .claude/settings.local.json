@@ -30,7 +30,8 @@
       "WebFetch(domain:tweakcn.com)",
       "WebFetch(domain:ui.aceternity.com)",
       "Bash(git pull:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []
