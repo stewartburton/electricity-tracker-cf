@@ -1,0 +1,34 @@
+⚡ PowerMeter - {{senderName}} thinks you'd love this electricity tracking app!
+
+Hi there!
+
+{{senderName}} thinks you'd benefit from PowerMeter - South Africa's leading electricity usage tracking platform.
+
+{{#if personalMessage}}
+Personal message from {{senderName}}: "{{personalMessage}}"
+{{/if}}
+
+Key features:
+📊 Smart Analytics - Track consumption trends and spending patterns
+📱 SMS Integration - Import vouchers directly from FNB SMS
+👨‍👩‍👧‍👦 Family Accounts - Share tracking with household members
+📈 Monthly Reports - Detailed consumption and cost analysis
+
+Start tracking your electricity usage: {{registrationUrl}}
+
+Free to get started • No credit card required
+
+Why PowerMeter?
+🇿🇦 Built specifically for South African prepaid electricity
+⚡ Track voucher purchases and meter readings effortlessly
+📊 Understand your consumption patterns with detailed analytics
+💰 Optimize your electricity spending and reduce waste
+👨‍👩‍👧‍👦 Manage family usage together with shared accounts
+📱 Import vouchers directly from FNB SMS messages
+
+Join thousands of South African families already saving on electricity with PowerMeter.
+
+---
+Recommended by {{senderName}} via PowerMeter
+PowerMeter.app - Smart Electricity Tracking for South African Families
+Unsubscribe: {{unsubscribeUrl}}

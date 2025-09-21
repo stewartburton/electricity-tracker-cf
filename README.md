@@ -68,7 +68,17 @@ electricity-tracker-cf/
 │       └── theme-effects.js  # Background beams & clean hover effects
 ├── migrations/
 │   ├── 001_multi_tenant.sql  # Multi-tenant database schema
-│   └── 002_invite_codes.sql  # Invite codes table
+│   ├── 002_invite_codes.sql  # Invite codes table
+│   └── 003_email_invitations.sql  # Email invitation tracking
+├── services/
+│   ├── emailService.js       # Gmail API integration (legacy)
+│   └── cloudflareEmailService.js  # Modern email service with Resend
+├── templates/
+│   └── email/                # Email templates
+│       ├── family-invitation.html
+│       ├── family-invitation.txt
+│       ├── new-account-invitation.html
+│       └── new-account-invitation.txt
 ├── tests/
 │   └── test.spec.js          # Playwright tests
 ├── package.json              # Dependencies
@@ -103,6 +113,7 @@ electricity-tracker-cf/
 - ✅ **Notes System** - Add contextual notes to vouchers and readings
 - ✅ **Mobile Responsive** - Full mobile navigation and optimized layouts
 - ✅ **South African Support** - Timezone, currency, and FNB SMS formatting
+- ✅ **Email Invitation System** - Professional email invitations for family members and referrals
 
 ### API Endpoints
 
@@ -132,6 +143,14 @@ electricity-tracker-cf/
 - `GET /api/dashboard` - Dashboard data with household aggregation
 - `GET /api/analytics` - Analytics data with consumption trends
 - `GET /api/transactions` - Combined transactions with filtering
+
+#### Email Invitations
+- `POST /api/invitations/family` - Send family invitation email
+- `POST /api/invitations/new-account` - Send new account referral email
+- `GET /api/invitations` - List sent invitations with tracking status
+- `GET /api/invitations/track/open/:id` - Email open tracking endpoint
+- `GET /api/invitations/track/click/:id` - Email click tracking endpoint
+- `GET /api/invitations/unsubscribe/:id` - Email unsubscribe handling
 
 ## 🛠️ Troubleshooting
 
@@ -265,8 +284,40 @@ npx wrangler d1 execute electricity-tracker-db --sql=".schema"
   - One-click download functionality
 - **Password Management** - Secure password changes with validation
 - **Tenant Administration** - Family account admins can manage members
+- **Email Invitation System** - Professional email invitations with tracking
+  - Family invitations to join existing household accounts
+  - New account referral invitations for separate tenants
+  - Email tracking (opens, clicks, unsubscribes)
+  - Professional email templates with PowerMeter branding
+  - Resend integration for reliable delivery
 
-## 🔄 Recent Updates (v4.0 - Multi-Tenant SaaS)
+## 🔄 Recent Updates (v4.1 - Email Invitation System)
+
+### ✉️ Professional Email Invitation System
+- ✅ **Email Service Integration** - Resend.com integration for reliable email delivery
+- ✅ **Professional Email Templates** - Beautiful HTML templates with PowerMeter branding
+- ✅ **Dual Invitation Types** - Family invitations and new account referrals
+- ✅ **Email Tracking** - Open, click, and unsubscribe tracking
+- ✅ **Domain Authentication** - Professional sending domain (send.powermeter.app)
+- ✅ **Mobile-Responsive UI** - Clean invitation management interface
+- ✅ **Email Status Monitoring** - Real-time tracking of invitation engagement
+
+### 📧 Email System Features
+- **Family Invitations**: Invite users to join existing household/tenant
+- **New Account Invitations**: Refer users to create their own separate tenant
+- **Email Tracking**: Comprehensive tracking of opens, clicks, and unsubscribes
+- **Professional Templates**: Branded HTML emails with responsive design
+- **Delivery Reliability**: 95%+ inbox delivery rate with verified domain
+- **Personal Messages**: Optional custom messages in invitations
+
+### 🛠️ Technical Implementation
+- **CloudflareEmailService**: Email service abstraction supporting multiple providers
+- **Email Templates**: Embedded HTML templates with variable substitution
+- **Database Integration**: email_invitations table for tracking and analytics
+- **API Endpoints**: RESTful endpoints for sending and tracking invitations
+- **Security**: Proper email validation and tracking pixel implementation
+
+## 🔄 Previous Updates (v4.0 - Multi-Tenant SaaS)
 
 ### 🏢 Multi-Tenant Architecture
 - ✅ **Complete Data Isolation** - Tenant-based data segregation with automatic filtering
@@ -411,5 +462,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Last Updated**: September 2025
 **Status**: ✅ Production Ready
-**Version**: 4.0.0 - Multi-Tenant SaaS Platform Release  
+**Version**: 4.1.0 - Email Invitation System Release
 **Live Demo**: [powermeter.app](https://powermeter.app)

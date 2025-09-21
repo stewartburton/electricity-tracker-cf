@@ -32,7 +32,10 @@
       "Bash(git pull:*)",
       "Bash(git branch:*)",
       "Bash(gh pr create:*)",
-      "WebFetch(domain:127.0.0.1)"
+      "WebFetch(domain:127.0.0.1)",
+      "Bash(npm run deploy:*)",
+      "Bash(npm run:*)",
+      "Bash(npm update:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,29 @@
+⚡ PowerMeter - You're invited to join {{senderName}}'s family account!
+
+Hi there!
+
+{{senderName}} ({{senderEmail}}) has invited you to join their PowerMeter family account for tracking electricity usage together.
+
+Your invitation code: {{inviteCode}}
+
+Join their family account here: {{registrationUrl}}
+
+What you'll be able to do:
+• View shared electricity usage data
+• Add voucher purchases and meter readings
+• See family consumption trends and analytics
+• Track household electricity spending together
+
+{{#if personalMessage}}
+Personal message from {{senderName}}: "{{personalMessage}}"
+{{/if}}
+
+What is PowerMeter?
+PowerMeter is a family-friendly electricity tracking platform that helps South African households monitor their prepaid electricity usage, track spending patterns, and manage consumption together.
+
+This invitation expires on {{expiryDate}}.
+
+---
+Sent by {{senderName}} via PowerMeter
+PowerMeter.app - Smart Electricity Tracking for South African Families
+Unsubscribe: {{unsubscribeUrl}}
