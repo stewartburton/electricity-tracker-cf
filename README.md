@@ -412,4 +412,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Last Updated**: September 2025
 **Status**: ✅ Production Ready
 **Version**: 4.0.0 - Multi-Tenant SaaS Platform Release  
-**Live Demo**: [electricity-tracker.electricity-monitor.workers.dev](https://electricity-tracker.electricity-monitor.workers.dev)
+**Live Demo**: [powermeter.app](https://powermeter.app)
