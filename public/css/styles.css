@@ -345,10 +345,9 @@ h1, h2, h3, .page-title, .tab-btn, .nav-btn, .stat-icon, .type-badge {
   font-feature-settings: "liga" 1, "kern" 1;
 }
 
-/* Font Awesome icon styling for page titles */
-.dashboard-title i, .history-title i, .reading-title i, .voucher-title i {
-  margin-right: 0.5rem;
-  color: var(--primary);
+/* Unicode emoji styling for page titles */
+.dashboard-title, .history-title, .reading-title, .voucher-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
 /* Forms */
