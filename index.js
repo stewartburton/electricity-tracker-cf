@@ -152,7 +152,7 @@ app.post('/api/auth/login', async (c) => {
 app.post('/api/auth/register', async (c) => {
   try {
     const { email, password, registrationKey, inviteCode } = await c.req.json();
-    
+
     if (!email || !password) {
       return c.json({ error: 'Email and password are required' }, 400);
     }
@@ -1717,11 +1717,39 @@ app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c
 
     console.log('Proceeding with removal - member role is:', memberToRemove.role);
 
-    // Remove user from tenant
-    await db.prepare(`
-      DELETE FROM tenant_users
-      WHERE tenant_id = ? AND user_id = ?
-    `).bind(tenant.id, userId).run();
+    // Check if user is a member of any other tenants
+    const otherTenantMemberships = await db.prepare(`
+      SELECT COUNT(*) as count FROM tenant_users
+      WHERE user_id = ? AND tenant_id != ?
+    `).bind(userId, tenant.id).first();
+
+    console.log('User has other tenant memberships:', otherTenantMemberships.count);
+
+    if (otherTenantMemberships.count === 0) {
+      // User is only in this tenant, so delete the user entirely
+      console.log('Deleting user entirely (no other tenants)');
+
+      // Delete from tenant_users first (foreign key constraint)
+      await db.prepare(`
+        DELETE FROM tenant_users
+        WHERE tenant_id = ? AND user_id = ?
+      `).bind(tenant.id, userId).run();
+
+      // Delete the user record
+      await db.prepare(`
+        DELETE FROM users
+        WHERE id = ?
+      `).bind(userId).run();
+
+      console.log('User completely deleted');
+    } else {
+      // User is in other tenants, just remove from this tenant
+      console.log('User has other tenants, just removing from this tenant');
+      await db.prepare(`
+        DELETE FROM tenant_users
+        WHERE tenant_id = ? AND user_id = ?
+      `).bind(tenant.id, userId).run();
+    }
 
     return c.json({
       success: true,
