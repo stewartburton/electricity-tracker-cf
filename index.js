@@ -621,38 +621,49 @@ app.get('/api/account/info', async (c) => {
     const user = c.get('user');
     const db = c.env.DB;
 
-    // Get account info with group details
+    // Get account info with tenant details using new schema
     const accountInfo = await db.prepare(`
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.created_at,
-        ag.id as group_id,
-        ag.name as group_name,
-        ag.invite_code,
-        ug.role,
-        ug.joined_at
+        t.id as tenant_id,
+        t.name as tenant_name,
+        tu.role,
+        tu.created_at as joined_at
       FROM users u
-      LEFT JOIN user_groups ug ON u.id = ug.user_id
-      LEFT JOIN account_groups ag ON ug.group_id = ag.id
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
       WHERE u.id = ?
     `).bind(user.userId).first();
 
-    // Get linked accounts if in a group
+    // Get invite code for this tenant
+    let inviteCode = null;
+    if (accountInfo.tenant_id) {
+      const inviteResult = await db.prepare(`
+        SELECT code FROM invite_codes
+        WHERE tenant_id = ? AND is_active = 1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).bind(accountInfo.tenant_id).first();
+      inviteCode = inviteResult?.code || null;
+    }
+
+    // Get linked accounts if in a tenant
     let linkedAccounts = [];
-    if (accountInfo.group_id) {
+    if (accountInfo.tenant_id) {
       const linkedResult = await db.prepare(`
-        SELECT 
-          u.id,
+        SELECT
+          u.id as user_id,
           u.email,
-          ug.role,
-          ug.joined_at
-        FROM user_groups ug
-        JOIN users u ON ug.user_id = u.id
-        WHERE ug.group_id = ? AND u.id != ?
-        ORDER BY ug.joined_at ASC
-      `).bind(accountInfo.group_id, user.userId).all();
-      
+          tu.role,
+          tu.created_at as joined_at
+        FROM tenant_users tu
+        JOIN users u ON tu.user_id = u.id
+        WHERE tu.tenant_id = ?
+        ORDER BY tu.created_at ASC
+      `).bind(accountInfo.tenant_id).all();
+
       linkedAccounts = linkedResult.results || [];
     }
 
@@ -662,12 +673,13 @@ app.get('/api/account/info', async (c) => {
         user: {
           id: accountInfo.id,
           email: accountInfo.email,
-          created_at: accountInfo.created_at
+          created_at: accountInfo.created_at,
+          role: accountInfo.role
         },
-        group: accountInfo.group_id ? {
-          id: accountInfo.group_id,
-          name: accountInfo.group_name,
-          invite_code: accountInfo.invite_code,
+        group: accountInfo.tenant_id ? {
+          id: accountInfo.tenant_id,
+          name: accountInfo.tenant_name,
+          invite_code: inviteCode,
           role: accountInfo.role,
           joined_at: accountInfo.joined_at
         } : null,
