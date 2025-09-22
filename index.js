@@ -5,6 +5,27 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import CloudflareEmailService from './services/cloudflareEmailService.js';
 
+// Helper function to extract a friendly name from email address
+function getFriendlyNameFromEmail(email) {
+  if (!email) return 'User';
+
+  // Extract the part before @ and remove numbers
+  const localPart = email.split('@')[0];
+
+  // Handle formats like "stewart.burton84" or "john.doe"
+  const nameWithoutNumbers = localPart.replace(/\d+/g, '');
+
+  // Split by dots, underscores, or hyphens
+  const nameParts = nameWithoutNumbers.split(/[._-]/);
+
+  // Capitalize each part
+  const capitalizedParts = nameParts
+    .filter(part => part.length > 0)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+
+  return capitalizedParts.join(' ') || 'User';
+}
+
 const app = new Hono();
 
 // CORS middleware
@@ -1082,11 +1103,29 @@ app.get('/api/export/data', async (c) => {
 // Send family invitation via email
 app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) => {
   try {
-    const { email, recipientEmail, personalMessage } = await c.req.json();
+    console.log('=== Family Invitation Debug Start ===');
+
+    // Parse request data
+    let requestData;
+    try {
+      requestData = await c.req.json();
+      console.log('Request data parsed:', requestData);
+    } catch (error) {
+      console.error('Failed to parse request JSON:', error);
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+
+    const { email, recipientEmail, personalMessage } = requestData;
     const emailToUse = email || recipientEmail;
+    console.log('Email to use:', emailToUse);
+
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
+
+    console.log('User:', user?.userId, user?.email);
+    console.log('Tenant:', tenant?.id, tenant?.name, tenant?.role);
+    console.log('DB available:', !!db);
 
     // Validate admin role
     if (tenant.role !== 'admin') {
@@ -1146,16 +1185,35 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     const emailInvitationId = emailInvitationResult.meta.last_row_id;
 
     // Send email
+    console.log('Creating email service...');
+    console.log('Environment vars available:', {
+      RESEND_API_KEY: !!c.env.RESEND_API_KEY,
+      FROM_EMAIL: c.env.FROM_EMAIL,
+      BASE_URL: c.env.BASE_URL
+    });
+
     const emailService = new CloudflareEmailService(c.env);
-    const emailResult = await emailService.sendFamilyInvitation({
+    console.log('Email service created successfully');
+
+    const invitationData = {
       recipientEmail: emailToUse,
-      senderName: user.name || user.email,
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
       senderEmail: user.email,
       inviteCode,
       tenantName: tenant.name,
       personalMessage,
       emailInvitationId
-    });
+    };
+    console.log('Sending email with data:', invitationData);
+
+    let emailResult;
+    try {
+      emailResult = await emailService.sendFamilyInvitation(invitationData);
+      console.log('Email send result:', emailResult);
+    } catch (emailError) {
+      console.error('Email service error:', emailError);
+      return c.json({ error: 'Failed to send invitation email: ' + emailError.message }, 500);
+    }
 
     if (!emailResult.success) {
       console.error('Email sending failed:', emailResult.error);
@@ -1193,8 +1251,16 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     });
 
   } catch (error) {
-    console.error('Family invitation error:', error);
-    return c.json({ error: 'Failed to send family invitation' }, 500);
+    console.error('=== Family Invitation Error ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error object:', error);
+    console.error('=== End Error Debug ===');
+    return c.json({
+      error: 'Failed to send family invitation',
+      details: error.message,
+      stack: error.stack
+    }, 500);
   }
 });
 
@@ -1238,7 +1304,7 @@ app.post('/api/invitations/new-account', authMiddleware, tenantMiddleware, async
     const emailService = new CloudflareEmailService(c.env);
     const emailResult = await emailService.sendNewAccountInvitation({
       recipientEmail: emailToUse,
-      senderName: user.name || user.email,
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
       referralCode,
       personalMessage,
       emailInvitationId
@@ -1407,6 +1473,132 @@ app.get('/api/invitations/unsubscribe/:emailId', async (c) => {
   }
 });
 
+// Generate shareable invitation link
+app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { recipientEmail, personalMessage } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    if (!recipientEmail) {
+      return c.json({ error: 'Recipient email is required' }, 400);
+    }
+
+    // Generate invite code for the tenant
+    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase() +
+                       Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // Create invite code record
+    const inviteResult = await db.prepare(`
+      INSERT INTO invite_codes (
+        code, tenant_id, created_by, expires_at, max_uses, current_uses, is_active
+      ) VALUES (?, ?, ?, ?, 1, 0, 1)
+    `).bind(
+      inviteCode,
+      tenant.id,
+      user.userId,
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    ).run();
+
+    // Create shareable token (encoded invitation data)
+    const invitationData = {
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
+      senderEmail: user.email,
+      tenantName: tenant.name,
+      inviteCode,
+      personalMessage: personalMessage || null,
+      recipientEmail,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    // Create a simple token (base64 encoded JSON)
+    const token = btoa(JSON.stringify(invitationData));
+    const inviteUrl = `https://powermeter.app/invite?token=${encodeURIComponent(token)}`;
+
+    // Generate WhatsApp message
+    const whatsappMessage = `🌟 *You're invited to PowerMeter!*\n\nHi! ${invitationData.senderName} has invited you to join their family electricity tracking account on PowerMeter.\n\n⚡ *What you'll get:*\n• Track electricity usage together\n• Add vouchers and meter readings\n• See family consumption trends\n• Manage household spending\n\n🔑 *Your invite code:* ${inviteCode}\n\n👆 Click the link to join: ${inviteUrl}\n\n${personalMessage ? `💬 *Personal message:* "${personalMessage}"\n\n` : ''}--\nPowerMeter - Track your electricity usage together! 🏠⚡`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+
+    // Create email invitation record for tracking
+    const emailInvitationId = Math.random().toString(36).substring(2, 15);
+    await db.prepare(`
+      INSERT INTO email_invitations (
+        id, tenant_id, sender_user_id, recipient_email, invitation_type,
+        invite_code, email_subject, email_body_html, email_body_text,
+        expires_at, sent_at, status, metadata
+      ) VALUES (?, ?, ?, ?, 'family', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
+    `).bind(
+      emailInvitationId,
+      tenant.id,
+      user.userId,
+      recipientEmail,
+      inviteCode,
+      `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
+      `Generated shareable link: ${inviteUrl}`,
+      whatsappMessage,
+      invitationData.expiresAt,
+      JSON.stringify({ method: 'link', inviteUrl: inviteUrl, whatsappUrl })
+    ).run();
+
+    return c.json({
+      success: true,
+      data: {
+        inviteUrl,
+        whatsappUrl,
+        inviteCode,
+        expiresAt: invitationData.expiresAt,
+        message: whatsappMessage
+      }
+    });
+
+  } catch (error) {
+    console.error('Generate link error:', error);
+    return c.json({ error: 'Failed to generate invitation link' }, 500);
+  }
+});
+
+// Get invitation details from token (for the invite page)
+app.get('/api/invitations/details', async (c) => {
+  try {
+    const token = c.req.query('token');
+
+    if (!token) {
+      return c.json({ error: 'Token is required' }, 400);
+    }
+
+    // Decode the token
+    let invitationData;
+    try {
+      invitationData = JSON.parse(atob(token));
+    } catch (e) {
+      return c.json({ error: 'Invalid token' }, 400);
+    }
+
+    // Check if invitation has expired
+    if (new Date() > new Date(invitationData.expiresAt)) {
+      return c.json({ error: 'Invitation has expired' }, 400);
+    }
+
+    // Return invitation details (without sensitive info)
+    return c.json({
+      success: true,
+      data: {
+        senderName: invitationData.senderName,
+        tenantName: invitationData.tenantName,
+        inviteCode: invitationData.inviteCode,
+        personalMessage: invitationData.personalMessage,
+        expiresAt: invitationData.expiresAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Get invitation details error:', error);
+    return c.json({ error: 'Failed to load invitation details' }, 500);
+  }
+});
+
 // Serve static files from public directory - exclude API routes
 app.get('/css/*', serveStatic({ root: './public' }));
 app.get('/js/*', serveStatic({ root: './public' }));
@@ -1422,5 +1614,6 @@ app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
 app.get('/reading', serveStatic({ path: './public/reading.html' }));
 app.get('/history', serveStatic({ path: './public/history.html' }));
 app.get('/settings', serveStatic({ path: './public/settings.html' }));
+app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
 export default app;

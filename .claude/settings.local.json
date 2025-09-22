@@ -35,7 +35,10 @@
       "WebFetch(domain:127.0.0.1)",
       "Bash(npm run deploy:*)",
       "Bash(npm run:*)",
-      "Bash(npm update:*)"
+      "Bash(npm update:*)",
+      "WebFetch(domain:resend.com)",
+      "WebSearch",
+      "Bash(pgrep:*)"
     ],
     "deny": [],
     "ask": []

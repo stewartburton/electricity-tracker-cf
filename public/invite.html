@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PowerMeter Family Invitation</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .invite-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .invite-header {
+            background: linear-gradient(135deg, #c27d18, #e59b3d);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+        .invite-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .invite-code-box {
+            background: #f0f8ff;
+            border: 2px solid #c27d18;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .invite-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #c27d18;
+            font-family: monospace;
+        }
+        .benefits-list {
+            list-style: none;
+            padding: 0;
+        }
+        .benefits-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .benefits-list li:before {
+            content: "⚡";
+            margin-right: 10px;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        .primary-btn, .secondary-btn {
+            padding: 12px 25px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .primary-btn {
+            background: #c27d18;
+            color: white;
+        }
+        .secondary-btn {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        .footer-info {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .error-message {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #a00;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="invite-container">
+        <div id="loadingSection" class="loading">
+            <h2>Loading invitation details...</h2>
+        </div>
+
+        <div id="errorSection" class="error-message" style="display: none;">
+            <h2>❌ Invalid Invitation</h2>
+            <p>This invitation link is invalid or has expired.</p>
+            <p><a href="/register">Register for PowerMeter</a> | <a href="/">Visit PowerMeter</a></p>
+        </div>
+
+        <div id="inviteSection" style="display: none;">
+            <div class="invite-header">
+                <h1>⚡ PowerMeter</h1>
+                <h2 id="inviteTitle">You're invited to join our family account!</h2>
+            </div>
+
+            <div class="invite-content">
+                <h2>Hi there!</h2>
+                <p id="inviteMessage">You've been invited to join a PowerMeter family account for tracking electricity usage together.</p>
+
+                <div class="invite-code-box">
+                    <div>Your invitation code:</div>
+                    <div class="invite-code" id="inviteCode">LOADING...</div>
+                </div>
+
+                <div id="personalMessageSection" style="display: none;">
+                    <h3>Personal Message:</h3>
+                    <div id="personalMessage" style="background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 15px; margin: 15px 0; font-style: italic;"></div>
+                </div>
+
+                <h3>What you'll be able to do:</h3>
+                <ul class="benefits-list">
+                    <li>View shared electricity usage data</li>
+                    <li>Add voucher purchases and meter readings</li>
+                    <li>See family consumption trends and analytics</li>
+                    <li>Track household electricity spending together</li>
+                </ul>
+
+                <div class="action-buttons">
+                    <a href="/register" class="primary-btn" id="joinButton">Join Family Account</a>
+                    <a href="/" class="secondary-btn">Learn More About PowerMeter</a>
+                </div>
+            </div>
+
+            <div class="footer-info">
+                <p><strong>What is PowerMeter?</strong><br>
+                PowerMeter is a family-friendly electricity tracking platform that helps South African households monitor their prepaid electricity usage, track spending patterns, and manage consumption together.</p>
+                <p>Sent by <span id="senderName">someone</span> via PowerMeter</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get invitation token from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        if (!token) {
+            showError();
+            return;
+        }
+
+        // Load invitation details
+        async function loadInvitation() {
+            try {
+                const response = await fetch(`/api/invitations/details?token=${encodeURIComponent(token)}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    showError();
+                    return;
+                }
+
+                showInvitation(data.data);
+            } catch (error) {
+                console.error('Failed to load invitation:', error);
+                showError();
+            }
+        }
+
+        function showError() {
+            document.getElementById('loadingSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'block';
+            document.getElementById('inviteSection').style.display = 'none';
+        }
+
+        function showInvitation(invite) {
+            document.getElementById('loadingSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'none';
+            document.getElementById('inviteSection').style.display = 'block';
+
+            // Update content
+            document.getElementById('inviteTitle').textContent =
+                `You're invited to join ${invite.senderName}'s PowerMeter family account!`;
+
+            document.getElementById('inviteMessage').textContent =
+                `${invite.senderName} has invited you to join their PowerMeter family account for tracking electricity usage together.`;
+
+            document.getElementById('inviteCode').textContent = invite.inviteCode;
+            document.getElementById('senderName').textContent = invite.senderName;
+
+            // Show personal message if provided
+            if (invite.personalMessage) {
+                document.getElementById('personalMessage').textContent = `"${invite.personalMessage}"`;
+                document.getElementById('personalMessageSection').style.display = 'block';
+            }
+
+            // Update join button to include invite code
+            const joinButton = document.getElementById('joinButton');
+            joinButton.href = `/register?invite=${encodeURIComponent(invite.inviteCode)}`;
+
+            // Update page title
+            document.title = `Join ${invite.senderName}'s PowerMeter family account`;
+        }
+
+        // Load invitation on page load
+        loadInvitation();
+    </script>
+</body>
+</html>

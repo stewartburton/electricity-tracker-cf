@@ -225,6 +225,19 @@ class CloudflareEmailService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Resend API error response:', errorText);
+
+        // Handle specific testing mode limitation
+        if (errorText.includes('You can only send testing emails to your own email address')) {
+          const match = errorText.match(/email address \(([^)]+)\)/);
+          const verifiedEmail = match ? match[1] : 'your verified email';
+          return {
+            success: false,
+            error: `Resend is in testing mode. You can only send emails to ${verifiedEmail}. To send to other recipients, please verify a domain at resend.com/domains.`,
+            isTestingMode: true,
+            verifiedEmail: verifiedEmail
+          };
+        }
+
         return {
           success: false,
           error: `Resend API error (${response.status}): ${errorText}`

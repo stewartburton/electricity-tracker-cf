@@ -13,9 +13,8 @@ routes = [
 directory = "./public"
 
 # Environment variables
-[env.production.vars]
-# Add any non-secret environment variables here
-# Example: APP_NAME = "Power Meter"
+[vars]
+FROM_EMAIL = "noreply@powermeter.app"
 
 # D1 Database binding
 [[d1_databases]]
@@ -25,6 +24,7 @@ database_id = "fbcc393d-4801-4fd1-a090-5dca1fa3ee92"
 
 # Secrets (use 'wrangler secret put' to set these)
 # JWT_SECRET - Set via: wrangler secret put JWT_SECRET
+# RESEND_API_KEY - Set via: wrangler secret put RESEND_API_KEY
 
 # Worker analytics (uncomment to enable)
 # [[analytics_engine_datasets]]
