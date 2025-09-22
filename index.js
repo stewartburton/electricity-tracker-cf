@@ -1214,7 +1214,9 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
       inviteCode,
       tenantName: tenant.name,
       personalMessage,
-      emailInvitationId
+      emailInvitationId,
+      registrationUrl: `https://powermeter.app/register?invite=${encodeURIComponent(inviteCode)}&email=${encodeURIComponent(emailToUse)}`,
+      unsubscribeUrl: `https://powermeter.app/api/invitations/unsubscribe/${emailInvitationId}`
     };
     console.log('Sending email with data:', invitationData);
 
@@ -1376,7 +1378,7 @@ app.get('/api/invitations', authMiddleware, tenantMiddleware, async (c) => {
 
     return c.json({
       success: true,
-      invitations: invitations.results || []
+      data: invitations.results || []
     });
 
   } catch (error) {
@@ -1620,8 +1622,14 @@ app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
+    console.log('=== Remove Member Debug ===');
+    console.log('User:', user?.userId, user?.email);
+    console.log('Tenant:', tenant?.id, tenant?.name, tenant?.role);
+    console.log('Target user ID:', userId);
+
     // Validate admin role
     if (tenant.role !== 'admin') {
+      console.log('Permission denied - user role is:', tenant.role, 'but admin required');
       return c.json({ error: 'Admin role required to remove family members' }, 403);
     }
 
@@ -1642,14 +1650,17 @@ app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c
       WHERE tu.tenant_id = ? AND tu.user_id = ?
     `).bind(tenant.id, userId).first();
 
+    console.log('Member to remove:', memberToRemove);
+
     if (!memberToRemove) {
+      console.log('Member not found in tenant');
       return c.json({ error: 'User is not a member of this family' }, 404);
     }
 
-    // Prevent removing another admin (only allow removing members)
-    if (memberToRemove.role === 'admin') {
-      return c.json({ error: 'Cannot remove another admin from the family' }, 403);
-    }
+    // Note: We allow admins to remove other admins, but not themselves (already checked above)
+    // This allows family management flexibility while preventing self-removal
+
+    console.log('Proceeding with removal - member role is:', memberToRemove.role);
 
     // Remove user from tenant
     await db.prepare(`
