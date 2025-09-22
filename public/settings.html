@@ -157,7 +157,14 @@
 
             <!-- Sent Invitations List -->
             <div style="border-top: 1px solid #e5e7eb; padding-top: 20px;">
-                <h3>📬 Sent Invitations</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📬 Sent Invitations</h3>
+                    <button onclick="clearAllInvitations()"
+                            style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px;"
+                            title="Clear all sent invitations">
+                        🗑️ Clear All
+                    </button>
+                </div>
                 <div id="sentInvitationsList">
                     <div style="text-align: center; color: #666; padding: 20px;">
                         Loading sent invitations...
@@ -468,25 +475,59 @@
                     return;
                 }
 
-                let html = '<div class="recent-list">';
+                // Group invitations by recipient email and type
+                const groupedInvitations = {};
                 invitations.forEach(invitation => {
+                    const key = `${invitation.invitation_type}:${invitation.recipient_email}`;
+
+                    if (!groupedInvitations[key]) {
+                        groupedInvitations[key] = {
+                            ...invitation,
+                            count: 1,
+                            latestSentAt: invitation.sent_at
+                        };
+                    } else {
+                        groupedInvitations[key].count++;
+
+                        // Keep the most recent send date and best status
+                        if (new Date(invitation.sent_at) > new Date(groupedInvitations[key].latestSentAt)) {
+                            groupedInvitations[key].latestSentAt = invitation.sent_at;
+                        }
+
+                        // Update to better status if available (clicked > opened > sent)
+                        const statusPriority = { 'clicked': 3, 'opened': 2, 'sent': 1 };
+                        if (statusPriority[invitation.status] > statusPriority[groupedInvitations[key].status]) {
+                            groupedInvitations[key].status = invitation.status;
+                            groupedInvitations[key].opened_at = invitation.opened_at;
+                            groupedInvitations[key].clicked_at = invitation.clicked_at;
+                        }
+                    }
+                });
+
+                // Convert back to array and sort by latest send date
+                const groupedArray = Object.values(groupedInvitations)
+                    .sort((a, b) => new Date(b.latestSentAt) - new Date(a.latestSentAt));
+
+                let html = '<div class="recent-list">';
+                groupedArray.forEach(invitation => {
                     const statusColor = invitation.status === 'sent' ? '#28a745' :
                                       invitation.status === 'opened' ? '#ffc107' :
                                       invitation.status === 'clicked' ? '#17a2b8' : '#6c757d';
 
                     const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' : '🌟 Referral';
+                    const countLabel = invitation.count > 1 ? ` <span style="color: #666; font-size: 14px;">x${invitation.count}</span>` : '';
 
                     html += `
                         <div class="recent-item" style="align-items: flex-start;">
                             <div style="flex: 1;">
                                 <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 5px;">
-                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}</span>
+                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}${countLabel}</span>
                                     <span style="color: ${statusColor}; font-size: 12px; padding: 2px 8px; background: ${statusColor}20; border-radius: 12px;">
                                         ${invitation.status.toUpperCase()}
                                     </span>
                                 </div>
                                 <div style="font-size: 12px; color: #666;">
-                                    Sent: ${new Date(invitation.sent_at).toLocaleDateString()}
+                                    ${invitation.count > 1 ? 'Last sent' : 'Sent'}: ${new Date(invitation.latestSentAt).toLocaleDateString()}
                                     ${invitation.opened_at ? ` • Opened: ${new Date(invitation.opened_at).toLocaleDateString()}` : ''}
                                     ${invitation.clicked_at ? ` • Clicked: ${new Date(invitation.clicked_at).toLocaleDateString()}` : ''}
                                 </div>
@@ -498,6 +539,40 @@
 
                 container.innerHTML = html;
             }
+
+            // Clear all sent invitations
+            window.clearAllInvitations = async function() {
+                if (!confirm('Are you sure you want to clear all sent invitations? This action cannot be undone.')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/invitations/clear', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`Successfully cleared ${data.deletedCount} invitation records.`);
+                        // Reload the invitations list
+                        loadSentInvitations();
+                    } else {
+                        alert('Failed to clear invitations: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Clear invitations error:', error);
+                    alert(error.message || 'Failed to clear invitations');
+                }
+            };
 
             // Family invitation form handler
             document.getElementById('sendFamilyInviteForm').addEventListener('submit', async (e) => {

@@ -167,41 +167,43 @@ app.post('/api/auth/register', async (c) => {
     }
 
     const db = c.env.DB;
-    
+
     // Check if user already exists
-    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-    
+    const existingUser = await db.prepare('SELECT id, password FROM users WHERE email = ?').bind(email).first();
+
+    let userId = null;
+    let isNewUser = false;
+
     if (existingUser) {
-      return c.json({ error: 'User already exists' }, 409);
-    }
-
-    // If using invite code, validate it exists
-    let groupId = null;
-    if (inviteCode) {
-      const group = await db.prepare(`
-        SELECT id FROM account_groups WHERE invite_code = ?
-      `).bind(inviteCode).first();
-      
-      if (!group) {
-        return c.json({ error: 'Invalid invite code' }, 400);
+      // User exists - handle based on whether they have invite code
+      if (!inviteCode) {
+        return c.json({ error: 'User already exists. Please login instead.' }, 409);
       }
-      groupId = group.id;
+
+      // User exists and has invite code - they might be rejoining a family
+      userId = existingUser.id;
+
+      // Validate the password they provided matches their existing account
+      const passwordValid = await bcrypt.compare(password, existingUser.password);
+      if (!passwordValid) {
+        return c.json({ error: 'Invalid password for existing account' }, 401);
+      }
+    } else {
+      // New user - create account
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      const result = await db.prepare(`
+        INSERT INTO users (email, password, created_at, updated_at)
+        VALUES (?, ?, datetime('now'), datetime('now'))
+      `).bind(email, hashedPassword).run();
+
+      if (!result.success) {
+        return c.json({ error: 'Failed to create user' }, 500);
+      }
+
+      userId = result.meta.last_row_id;
+      isNewUser = true;
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-    
-    // Create user
-    const result = await db.prepare(`
-      INSERT INTO users (email, password, created_at, updated_at)
-      VALUES (?, ?, datetime('now'), datetime('now'))
-    `).bind(email, hashedPassword).run();
-
-    if (!result.success) {
-      return c.json({ error: 'Failed to create user' }, 500);
-    }
-
-    const userId = result.meta.last_row_id;
 
     if (inviteCode) {
       // Join existing tenant via invite code
@@ -213,6 +215,19 @@ app.post('/api/auth/register', async (c) => {
       `).bind(inviteCode).first();
 
       if (invite) {
+        // Check if user is already a member of this tenant
+        const existingMembership = await db.prepare(`
+          SELECT id FROM tenant_users
+          WHERE tenant_id = ? AND user_id = ?
+        `).bind(invite.tenant_id, userId).first();
+
+        if (existingMembership) {
+          return c.json({
+            error: 'You are already a member of this family account. Please login instead.',
+            suggestion: 'Use the login page to access your account.'
+          }, 409);
+        }
+
         // Add user to existing tenant
         await db.prepare(`
           INSERT INTO tenant_users (tenant_id, user_id, role)
@@ -224,7 +239,7 @@ app.post('/api/auth/register', async (c) => {
           UPDATE invite_codes
           SET current_uses = current_uses + 1
           WHERE id = ?
-        `).run(invite.id);
+        `).bind(invite.id).run();
       } else {
         // Invalid invite code - create own tenant
         const tenantResult = await db.prepare(`
@@ -1384,6 +1399,46 @@ app.get('/api/invitations', authMiddleware, tenantMiddleware, async (c) => {
   } catch (error) {
     console.error('Get invitations error:', error);
     return c.json({ error: 'Failed to get invitations' }, 500);
+  }
+});
+
+// Clear all sent invitations for the tenant
+app.post('/api/invitations/clear', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Count existing invitations before deletion
+    const countResult = await db.prepare(`
+      SELECT COUNT(*) as count FROM email_invitations
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
+
+    const existingCount = countResult.count || 0;
+
+    if (existingCount === 0) {
+      return c.json({
+        success: true,
+        deletedCount: 0,
+        message: 'No invitations to clear'
+      });
+    }
+
+    // Delete all email invitations for this tenant
+    await db.prepare(`
+      DELETE FROM email_invitations
+      WHERE tenant_id = ?
+    `).bind(tenant.id).run();
+
+    return c.json({
+      success: true,
+      deletedCount: existingCount,
+      message: `Successfully cleared ${existingCount} invitation records`
+    });
+
+  } catch (error) {
+    console.error('Clear invitations error:', error);
+    return c.json({ error: 'Failed to clear invitations' }, 500);
   }
 });
 
