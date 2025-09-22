@@ -630,7 +630,7 @@ app.get('/api/account/info', async (c) => {
         t.id as tenant_id,
         t.name as tenant_name,
         tu.role,
-        tu.created_at as joined_at
+        u.created_at as joined_at
       FROM users u
       LEFT JOIN tenant_users tu ON u.id = tu.user_id
       LEFT JOIN tenants t ON tu.tenant_id = t.id
@@ -657,11 +657,11 @@ app.get('/api/account/info', async (c) => {
           u.id as user_id,
           u.email,
           tu.role,
-          tu.created_at as joined_at
+          u.created_at as joined_at
         FROM tenant_users tu
         JOIN users u ON tu.user_id = u.id
         WHERE tu.tenant_id = ?
-        ORDER BY tu.created_at ASC
+        ORDER BY u.created_at ASC
       `).bind(accountInfo.tenant_id).all();
 
       linkedAccounts = linkedResult.results || [];
