@@ -290,12 +290,26 @@
                         <div class="recent-list">
                     `;
                     accountData.linkedAccounts.forEach(account => {
+                        // Don't show remove button for current user or if current user isn't admin
+                        const isCurrentUser = account.user_id === accountData.user.id;
+                        const canRemove = accountData.user.role === 'admin' && !isCurrentUser;
+
                         html += `
                             <div class="recent-item">
-                                <span>📧 ${account.email}</span>
+                                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                    <span>📧 ${account.email}</span>
+                                    ${isCurrentUser ? '<small style="color: #007bff; font-weight: bold;">(You)</small>' : ''}
+                                </div>
                                 <div style="display: flex; gap: 10px; align-items: center;">
                                     <small>${account.role.charAt(0).toUpperCase() + account.role.slice(1)}</small>
                                     <small>${new Date(account.joined_at).toLocaleDateString()}</small>
+                                    ${canRemove ? `
+                                        <button onclick="removeFamilyMember('${account.user_id}', '${account.email}')"
+                                                style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; margin-left: 5px;"
+                                                title="Remove from family">
+                                            🗑️
+                                        </button>
+                                    ` : ''}
                                 </div>
                             </div>
                         `;
@@ -731,6 +745,43 @@ ${inviteData.message}
                     modal.remove();
                 }
             });
+        }
+
+        // Remove family member
+        async function removeFamilyMember(userId, email) {
+            if (!confirm(`Are you sure you want to remove ${email} from your family account? This action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/family/remove-member', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        userId: userId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`${email} has been removed from your family account.`);
+                    // Reload the account info to update the display
+                    loadAccountInfo();
+                } else {
+                    alert('Failed to remove family member: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Remove family member error:', error);
+                alert(error.message || 'Failed to remove family member');
+            }
         }
 
         // Copy to clipboard helper

@@ -1528,12 +1528,13 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
         id, tenant_id, sender_user_id, recipient_email, invitation_type,
         invite_code, email_subject, email_body_html, email_body_text,
         expires_at, sent_at, status, metadata
-      ) VALUES (?, ?, ?, ?, 'family', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
     `).bind(
       emailInvitationId,
       tenant.id,
       user.userId,
       recipientEmail,
+      'family',
       inviteCode,
       `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
       `Generated shareable link: ${inviteUrl}`,
@@ -1596,6 +1597,66 @@ app.get('/api/invitations/details', async (c) => {
   } catch (error) {
     console.error('Get invitation details error:', error);
     return c.json({ error: 'Failed to load invitation details' }, 500);
+  }
+});
+
+// Remove family member from tenant
+app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { userId } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Validate admin role
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to remove family members' }, 403);
+    }
+
+    if (!userId) {
+      return c.json({ error: 'User ID is required' }, 400);
+    }
+
+    // Prevent admin from removing themselves
+    if (userId === user.userId) {
+      return c.json({ error: 'Cannot remove yourself from the family' }, 400);
+    }
+
+    // Check if user exists in this tenant
+    const memberToRemove = await db.prepare(`
+      SELECT tu.*, u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.tenant_id = ? AND tu.user_id = ?
+    `).bind(tenant.id, userId).first();
+
+    if (!memberToRemove) {
+      return c.json({ error: 'User is not a member of this family' }, 404);
+    }
+
+    // Prevent removing another admin (only allow removing members)
+    if (memberToRemove.role === 'admin') {
+      return c.json({ error: 'Cannot remove another admin from the family' }, 403);
+    }
+
+    // Remove user from tenant
+    await db.prepare(`
+      DELETE FROM tenant_users
+      WHERE tenant_id = ? AND user_id = ?
+    `).bind(tenant.id, userId).run();
+
+    return c.json({
+      success: true,
+      message: `${memberToRemove.email} has been removed from the family`,
+      removedUser: {
+        email: memberToRemove.email,
+        userId: userId
+      }
+    });
+
+  } catch (error) {
+    console.error('Remove family member error:', error);
+    return c.json({ error: 'Failed to remove family member' }, 500);
   }
 });
 
