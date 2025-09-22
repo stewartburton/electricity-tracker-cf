@@ -354,6 +354,7 @@ app.post('/api/readings', async (c) => {
 app.delete('/api/readings/:id', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -361,10 +362,10 @@ app.delete('/api/readings/:id', async (c) => {
       return c.json({ error: 'Reading ID is required' }, 400);
     }
 
-    // First check if reading exists and belongs to user
+    // First check if reading exists and belongs to tenant (family)
     const reading = await db.prepare(`
-      SELECT * FROM readings WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).first();
+      SELECT * FROM readings WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).first();
 
     if (!reading) {
       return c.json({
@@ -373,10 +374,10 @@ app.delete('/api/readings/:id', async (c) => {
       }, 404);
     }
 
-    // Delete the reading
+    // Delete the reading (any family member can delete readings in their tenant)
     const result = await db.prepare(`
-      DELETE FROM readings WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).run();
+      DELETE FROM readings WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).run();
 
     if (result.success) {
       return c.json({
@@ -400,6 +401,7 @@ app.delete('/api/readings/:id', async (c) => {
 app.post('/api/vouchers', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes } = await c.req.json();
 
@@ -408,11 +410,11 @@ app.post('/api/vouchers', async (c) => {
       return c.json({ error: 'Token number, purchase date, rand amount, and kWh amount are required' }, 400);
     }
 
-    // Insert new voucher
+    // Insert new voucher with tenant isolation
     const result = await db.prepare(`
-      INSERT INTO vouchers (user_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).bind(user.userId, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
+      INSERT INTO vouchers (user_id, tenant_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).bind(user.userId, tenant.id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
 
     if (result.success) {
       return c.json({
@@ -433,6 +435,7 @@ app.post('/api/vouchers', async (c) => {
 app.delete('/api/vouchers/:id', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -440,10 +443,10 @@ app.delete('/api/vouchers/:id', async (c) => {
       return c.json({ error: 'Voucher ID is required' }, 400);
     }
 
-    // First check if voucher exists and belongs to user
+    // First check if voucher exists and belongs to tenant (family)
     const voucher = await db.prepare(`
-      SELECT * FROM vouchers WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).first();
+      SELECT * FROM vouchers WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).first();
 
     if (!voucher) {
       return c.json({
@@ -452,10 +455,10 @@ app.delete('/api/vouchers/:id', async (c) => {
       }, 404);
     }
 
-    // Delete the voucher
+    // Delete the voucher (any family member can delete vouchers in their tenant)
     const result = await db.prepare(`
-      DELETE FROM vouchers WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).run();
+      DELETE FROM vouchers WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).run();
 
     if (result.success) {
       return c.json({
@@ -475,59 +478,56 @@ app.delete('/api/vouchers/:id', async (c) => {
   }
 });
 
-// Dashboard endpoint (legacy compatibility)
-app.get('/api/dashboard', async (c) => {
+// Dashboard endpoint (tenant-based)
+app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts)
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
 
-    // Get voucher totals
+    // Get voucher totals for the tenant (family)
     const voucherResult = await db.prepare(`
-      SELECT 
+      SELECT
         COALESCE(SUM(rand_amount), 0) as total_amount,
         COALESCE(SUM(kwh_amount), 0) as total_units,
         COALESCE(SUM(vat_amount), 0) as total_vat,
         COUNT(*) as total_vouchers
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM vouchers
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
     // Calculate average cost per kWh
     const avgCostPerKwh = voucherResult.total_units > 0 ? 
       voucherResult.total_amount / voucherResult.total_units : 0;
 
-    // Get recent vouchers
+    // Get recent vouchers for the tenant (family)
     const recentVouchers = await db.prepare(`
-      SELECT * FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY purchase_date DESC 
+      SELECT * FROM vouchers
+      WHERE tenant_id = ?
+      ORDER BY purchase_date DESC
       LIMIT 5
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get recent readings
+    // Get recent readings for the tenant (family)
     const recentReadings = await db.prepare(`
-      SELECT * FROM readings 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY reading_date DESC 
+      SELECT * FROM readings
+      WHERE tenant_id = ?
+      ORDER BY reading_date DESC
       LIMIT 5
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get monthly data for the last 6 months
+    // Get monthly data for the last 6 months for the tenant (family)
     const monthlyData = await db.prepare(`
-      SELECT 
+      SELECT
         strftime('%Y-%m', purchase_date) as month,
         SUM(rand_amount) as amount,
         SUM(kwh_amount) as kwh
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
+      FROM vouchers
+      WHERE tenant_id = ?
         AND purchase_date >= date('now', '-6 months')
       GROUP BY strftime('%Y-%m', purchase_date)
       ORDER BY month DESC
-    `).all();
+    `).bind(tenant.id).all();
 
     return c.json({
       success: true,
@@ -539,7 +539,8 @@ app.get('/api/dashboard', async (c) => {
       recentVouchers: recentVouchers.results || [],
       recentReadings: recentReadings.results || [],
       monthlyData: monthlyData.results || [],
-      linkedAccountCount: sharedUserIds.length
+      tenantName: tenant.name,
+      userRole: tenant.role
     });
 
   } catch (error) {
@@ -548,40 +549,37 @@ app.get('/api/dashboard', async (c) => {
   }
 });
 
-// Dashboard stats (new format)
-app.get('/api/dashboard/stats', async (c) => {
+// Dashboard stats (tenant-based)
+app.get('/api/dashboard/stats', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts)
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
 
-    // Get voucher totals (money spent)
+    // Get voucher totals (money spent) for the tenant (family)
     const voucherResult = await db.prepare(`
-      SELECT 
+      SELECT
         COALESCE(SUM(rand_amount), 0) as total_purchased,
         COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
         COUNT(*) as voucher_count
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM vouchers
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
-    // Get reading data
+    // Get reading data for the tenant (family)
     const readingResult = await db.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as reading_count,
         MIN(reading_value) as lowest_reading,
         MAX(reading_value) as highest_reading,
         AVG(reading_value) as avg_reading
-      FROM readings 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM readings
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
-    // Get recent vouchers and readings combined
+    // Get recent vouchers for the tenant (family)
     const recentVouchers = await db.prepare(`
-      SELECT 
+      SELECT
         'voucher' as type,
         rand_amount as amount,
         kwh_amount,
@@ -589,24 +587,24 @@ app.get('/api/dashboard/stats', async (c) => {
         purchase_date as date,
         created_at,
         notes
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY purchase_date DESC 
+      FROM vouchers
+      WHERE tenant_id = ?
+      ORDER BY purchase_date DESC
       LIMIT 3
-    `).all();
+    `).bind(tenant.id).all();
 
     const recentReadings = await db.prepare(`
-      SELECT 
+      SELECT
         'reading' as type,
         reading_value as amount,
         reading_date as date,
         created_at,
         notes
-      FROM readings 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY reading_date DESC 
+      FROM readings
+      WHERE tenant_id = ?
+      ORDER BY reading_date DESC
       LIMIT 3
-    `).all();
+    `).bind(tenant.id).all();
 
     return c.json({
       success: true,
@@ -868,30 +866,27 @@ app.post('/api/account/leave-group', async (c) => {
   }
 });
 
-// Transactions endpoint for history page
+// Transactions endpoint for history page (tenant-based)
 app.get('/api/transactions', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts) - same as dashboard
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
-    
+
     // Get month filter if provided
     const month = c.req.query('month');
     let dateFilter = '';
     let readingDateFilter = '';
-    
+
     if (month) {
       dateFilter = `AND strftime('%Y-%m', purchase_date) = '${month}'`;
       readingDateFilter = `AND strftime('%Y-%m', reading_date) = '${month}'`;
       console.log(`Filtering by month: ${month}, dateFilter: ${dateFilter}, readingDateFilter: ${readingDateFilter}`);
     }
-    
-    // Get vouchers - use actual purchase_date for timestamp
+
+    // Get vouchers for the tenant (family) - use actual purchase_date for timestamp
     const vouchers = await db.prepare(`
-      SELECT 
+      SELECT
         'voucher' as type,
         id,
         user_id,
@@ -902,14 +897,14 @@ app.get('/api/transactions', async (c) => {
         kwh_amount,
         vat_amount,
         notes
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr}) ${dateFilter}
+      FROM vouchers
+      WHERE tenant_id = ? ${dateFilter}
       ORDER BY purchase_date DESC
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get readings - use actual reading_date for timestamp
+    // Get readings for the tenant (family) - use actual reading_date for timestamp
     const readings = await db.prepare(`
-      SELECT 
+      SELECT
         'reading' as type,
         id,
         user_id,
@@ -917,10 +912,10 @@ app.get('/api/transactions', async (c) => {
         reading_date,
         reading_date as date,
         notes
-      FROM readings 
-      WHERE user_id IN (${userIdsStr}) ${readingDateFilter}
+      FROM readings
+      WHERE tenant_id = ? ${readingDateFilter}
       ORDER BY reading_date DESC
-    `).all();
+    `).bind(tenant.id).all();
     
 
     return c.json({
