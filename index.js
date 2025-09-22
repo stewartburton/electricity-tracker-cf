@@ -5,6 +5,27 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import CloudflareEmailService from './services/cloudflareEmailService.js';
 
+// Helper function to extract a friendly name from email address
+function getFriendlyNameFromEmail(email) {
+  if (!email) return 'User';
+
+  // Extract the part before @ and remove numbers
+  const localPart = email.split('@')[0];
+
+  // Handle formats like "stewart.burton84" or "john.doe"
+  const nameWithoutNumbers = localPart.replace(/\d+/g, '');
+
+  // Split by dots, underscores, or hyphens
+  const nameParts = nameWithoutNumbers.split(/[._-]/);
+
+  // Capitalize each part
+  const capitalizedParts = nameParts
+    .filter(part => part.length > 0)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+
+  return capitalizedParts.join(' ') || 'User';
+}
+
 const app = new Hono();
 
 // CORS middleware
@@ -131,7 +152,7 @@ app.post('/api/auth/login', async (c) => {
 app.post('/api/auth/register', async (c) => {
   try {
     const { email, password, registrationKey, inviteCode } = await c.req.json();
-    
+
     if (!email || !password) {
       return c.json({ error: 'Email and password are required' }, 400);
     }
@@ -146,41 +167,43 @@ app.post('/api/auth/register', async (c) => {
     }
 
     const db = c.env.DB;
-    
+
     // Check if user already exists
-    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-    
+    const existingUser = await db.prepare('SELECT id, password FROM users WHERE email = ?').bind(email).first();
+
+    let userId = null;
+    let isNewUser = false;
+
     if (existingUser) {
-      return c.json({ error: 'User already exists' }, 409);
-    }
-
-    // If using invite code, validate it exists
-    let groupId = null;
-    if (inviteCode) {
-      const group = await db.prepare(`
-        SELECT id FROM account_groups WHERE invite_code = ?
-      `).bind(inviteCode).first();
-      
-      if (!group) {
-        return c.json({ error: 'Invalid invite code' }, 400);
+      // User exists - handle based on whether they have invite code
+      if (!inviteCode) {
+        return c.json({ error: 'User already exists. Please login instead.' }, 409);
       }
-      groupId = group.id;
+
+      // User exists and has invite code - they might be rejoining a family
+      userId = existingUser.id;
+
+      // Validate the password they provided matches their existing account
+      const passwordValid = await bcrypt.compare(password, existingUser.password);
+      if (!passwordValid) {
+        return c.json({ error: 'Invalid password for existing account' }, 401);
+      }
+    } else {
+      // New user - create account
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      const result = await db.prepare(`
+        INSERT INTO users (email, password, created_at, updated_at)
+        VALUES (?, ?, datetime('now'), datetime('now'))
+      `).bind(email, hashedPassword).run();
+
+      if (!result.success) {
+        return c.json({ error: 'Failed to create user' }, 500);
+      }
+
+      userId = result.meta.last_row_id;
+      isNewUser = true;
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-    
-    // Create user
-    const result = await db.prepare(`
-      INSERT INTO users (email, password, created_at, updated_at)
-      VALUES (?, ?, datetime('now'), datetime('now'))
-    `).bind(email, hashedPassword).run();
-
-    if (!result.success) {
-      return c.json({ error: 'Failed to create user' }, 500);
-    }
-
-    const userId = result.meta.last_row_id;
 
     if (inviteCode) {
       // Join existing tenant via invite code
@@ -192,6 +215,19 @@ app.post('/api/auth/register', async (c) => {
       `).bind(inviteCode).first();
 
       if (invite) {
+        // Check if user is already a member of this tenant
+        const existingMembership = await db.prepare(`
+          SELECT id FROM tenant_users
+          WHERE tenant_id = ? AND user_id = ?
+        `).bind(invite.tenant_id, userId).first();
+
+        if (existingMembership) {
+          return c.json({
+            error: 'You are already a member of this family account. Please login instead.',
+            suggestion: 'Use the login page to access your account.'
+          }, 409);
+        }
+
         // Add user to existing tenant
         await db.prepare(`
           INSERT INTO tenant_users (tenant_id, user_id, role)
@@ -203,7 +239,7 @@ app.post('/api/auth/register', async (c) => {
           UPDATE invite_codes
           SET current_uses = current_uses + 1
           WHERE id = ?
-        `).run(invite.id);
+        `).bind(invite.id).run();
       } else {
         // Invalid invite code - create own tenant
         const tenantResult = await db.prepare(`
@@ -318,6 +354,7 @@ app.post('/api/readings', async (c) => {
 app.delete('/api/readings/:id', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -325,10 +362,10 @@ app.delete('/api/readings/:id', async (c) => {
       return c.json({ error: 'Reading ID is required' }, 400);
     }
 
-    // First check if reading exists and belongs to user
+    // First check if reading exists and belongs to tenant (family)
     const reading = await db.prepare(`
-      SELECT * FROM readings WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).first();
+      SELECT * FROM readings WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).first();
 
     if (!reading) {
       return c.json({
@@ -337,10 +374,10 @@ app.delete('/api/readings/:id', async (c) => {
       }, 404);
     }
 
-    // Delete the reading
+    // Delete the reading (any family member can delete readings in their tenant)
     const result = await db.prepare(`
-      DELETE FROM readings WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).run();
+      DELETE FROM readings WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).run();
 
     if (result.success) {
       return c.json({
@@ -364,6 +401,7 @@ app.delete('/api/readings/:id', async (c) => {
 app.post('/api/vouchers', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes } = await c.req.json();
 
@@ -372,11 +410,11 @@ app.post('/api/vouchers', async (c) => {
       return c.json({ error: 'Token number, purchase date, rand amount, and kWh amount are required' }, 400);
     }
 
-    // Insert new voucher
+    // Insert new voucher with tenant isolation
     const result = await db.prepare(`
-      INSERT INTO vouchers (user_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).bind(user.userId, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
+      INSERT INTO vouchers (user_id, tenant_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).bind(user.userId, tenant.id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
 
     if (result.success) {
       return c.json({
@@ -397,6 +435,7 @@ app.post('/api/vouchers', async (c) => {
 app.delete('/api/vouchers/:id', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -404,10 +443,10 @@ app.delete('/api/vouchers/:id', async (c) => {
       return c.json({ error: 'Voucher ID is required' }, 400);
     }
 
-    // First check if voucher exists and belongs to user
+    // First check if voucher exists and belongs to tenant (family)
     const voucher = await db.prepare(`
-      SELECT * FROM vouchers WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).first();
+      SELECT * FROM vouchers WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).first();
 
     if (!voucher) {
       return c.json({
@@ -416,10 +455,10 @@ app.delete('/api/vouchers/:id', async (c) => {
       }, 404);
     }
 
-    // Delete the voucher
+    // Delete the voucher (any family member can delete vouchers in their tenant)
     const result = await db.prepare(`
-      DELETE FROM vouchers WHERE id = ? AND user_id = ?
-    `).bind(id, user.userId).run();
+      DELETE FROM vouchers WHERE id = ? AND tenant_id = ?
+    `).bind(id, tenant.id).run();
 
     if (result.success) {
       return c.json({
@@ -439,59 +478,56 @@ app.delete('/api/vouchers/:id', async (c) => {
   }
 });
 
-// Dashboard endpoint (legacy compatibility)
-app.get('/api/dashboard', async (c) => {
+// Dashboard endpoint (tenant-based)
+app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts)
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
 
-    // Get voucher totals
+    // Get voucher totals for the tenant (family)
     const voucherResult = await db.prepare(`
-      SELECT 
+      SELECT
         COALESCE(SUM(rand_amount), 0) as total_amount,
         COALESCE(SUM(kwh_amount), 0) as total_units,
         COALESCE(SUM(vat_amount), 0) as total_vat,
         COUNT(*) as total_vouchers
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM vouchers
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
     // Calculate average cost per kWh
     const avgCostPerKwh = voucherResult.total_units > 0 ? 
       voucherResult.total_amount / voucherResult.total_units : 0;
 
-    // Get recent vouchers
+    // Get recent vouchers for the tenant (family)
     const recentVouchers = await db.prepare(`
-      SELECT * FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY purchase_date DESC 
+      SELECT * FROM vouchers
+      WHERE tenant_id = ?
+      ORDER BY purchase_date DESC
       LIMIT 5
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get recent readings
+    // Get recent readings for the tenant (family)
     const recentReadings = await db.prepare(`
-      SELECT * FROM readings 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY reading_date DESC 
+      SELECT * FROM readings
+      WHERE tenant_id = ?
+      ORDER BY reading_date DESC
       LIMIT 5
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get monthly data for the last 6 months
+    // Get monthly data for the last 6 months for the tenant (family)
     const monthlyData = await db.prepare(`
-      SELECT 
+      SELECT
         strftime('%Y-%m', purchase_date) as month,
         SUM(rand_amount) as amount,
         SUM(kwh_amount) as kwh
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
+      FROM vouchers
+      WHERE tenant_id = ?
         AND purchase_date >= date('now', '-6 months')
       GROUP BY strftime('%Y-%m', purchase_date)
       ORDER BY month DESC
-    `).all();
+    `).bind(tenant.id).all();
 
     return c.json({
       success: true,
@@ -503,7 +539,8 @@ app.get('/api/dashboard', async (c) => {
       recentVouchers: recentVouchers.results || [],
       recentReadings: recentReadings.results || [],
       monthlyData: monthlyData.results || [],
-      linkedAccountCount: sharedUserIds.length
+      tenantName: tenant.name,
+      userRole: tenant.role
     });
 
   } catch (error) {
@@ -512,40 +549,37 @@ app.get('/api/dashboard', async (c) => {
   }
 });
 
-// Dashboard stats (new format)
-app.get('/api/dashboard/stats', async (c) => {
+// Dashboard stats (tenant-based)
+app.get('/api/dashboard/stats', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts)
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
 
-    // Get voucher totals (money spent)
+    // Get voucher totals (money spent) for the tenant (family)
     const voucherResult = await db.prepare(`
-      SELECT 
+      SELECT
         COALESCE(SUM(rand_amount), 0) as total_purchased,
         COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
         COUNT(*) as voucher_count
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM vouchers
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
-    // Get reading data
+    // Get reading data for the tenant (family)
     const readingResult = await db.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as reading_count,
         MIN(reading_value) as lowest_reading,
         MAX(reading_value) as highest_reading,
         AVG(reading_value) as avg_reading
-      FROM readings 
-      WHERE user_id IN (${userIdsStr})
-    `).first();
+      FROM readings
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
 
-    // Get recent vouchers and readings combined
+    // Get recent vouchers for the tenant (family)
     const recentVouchers = await db.prepare(`
-      SELECT 
+      SELECT
         'voucher' as type,
         rand_amount as amount,
         kwh_amount,
@@ -553,24 +587,24 @@ app.get('/api/dashboard/stats', async (c) => {
         purchase_date as date,
         created_at,
         notes
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY purchase_date DESC 
+      FROM vouchers
+      WHERE tenant_id = ?
+      ORDER BY purchase_date DESC
       LIMIT 3
-    `).all();
+    `).bind(tenant.id).all();
 
     const recentReadings = await db.prepare(`
-      SELECT 
+      SELECT
         'reading' as type,
         reading_value as amount,
         reading_date as date,
         created_at,
         notes
-      FROM readings 
-      WHERE user_id IN (${userIdsStr})
-      ORDER BY reading_date DESC 
+      FROM readings
+      WHERE tenant_id = ?
+      ORDER BY reading_date DESC
       LIMIT 3
-    `).all();
+    `).bind(tenant.id).all();
 
     return c.json({
       success: true,
@@ -600,38 +634,49 @@ app.get('/api/account/info', async (c) => {
     const user = c.get('user');
     const db = c.env.DB;
 
-    // Get account info with group details
+    // Get account info with tenant details using new schema
     const accountInfo = await db.prepare(`
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.created_at,
-        ag.id as group_id,
-        ag.name as group_name,
-        ag.invite_code,
-        ug.role,
-        ug.joined_at
+        t.id as tenant_id,
+        t.name as tenant_name,
+        tu.role,
+        u.created_at as joined_at
       FROM users u
-      LEFT JOIN user_groups ug ON u.id = ug.user_id
-      LEFT JOIN account_groups ag ON ug.group_id = ag.id
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
       WHERE u.id = ?
     `).bind(user.userId).first();
 
-    // Get linked accounts if in a group
+    // Get invite code for this tenant
+    let inviteCode = null;
+    if (accountInfo.tenant_id) {
+      const inviteResult = await db.prepare(`
+        SELECT code FROM invite_codes
+        WHERE tenant_id = ? AND is_active = 1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).bind(accountInfo.tenant_id).first();
+      inviteCode = inviteResult?.code || null;
+    }
+
+    // Get linked accounts if in a tenant
     let linkedAccounts = [];
-    if (accountInfo.group_id) {
+    if (accountInfo.tenant_id) {
       const linkedResult = await db.prepare(`
-        SELECT 
-          u.id,
+        SELECT
+          u.id as user_id,
           u.email,
-          ug.role,
-          ug.joined_at
-        FROM user_groups ug
-        JOIN users u ON ug.user_id = u.id
-        WHERE ug.group_id = ? AND u.id != ?
-        ORDER BY ug.joined_at ASC
-      `).bind(accountInfo.group_id, user.userId).all();
-      
+          tu.role,
+          u.created_at as joined_at
+        FROM tenant_users tu
+        JOIN users u ON tu.user_id = u.id
+        WHERE tu.tenant_id = ?
+        ORDER BY u.created_at ASC
+      `).bind(accountInfo.tenant_id).all();
+
       linkedAccounts = linkedResult.results || [];
     }
 
@@ -641,12 +686,13 @@ app.get('/api/account/info', async (c) => {
         user: {
           id: accountInfo.id,
           email: accountInfo.email,
-          created_at: accountInfo.created_at
+          created_at: accountInfo.created_at,
+          role: accountInfo.role
         },
-        group: accountInfo.group_id ? {
-          id: accountInfo.group_id,
-          name: accountInfo.group_name,
-          invite_code: accountInfo.invite_code,
+        group: accountInfo.tenant_id ? {
+          id: accountInfo.tenant_id,
+          name: accountInfo.tenant_name,
+          invite_code: inviteCode,
           role: accountInfo.role,
           joined_at: accountInfo.joined_at
         } : null,
@@ -820,30 +866,27 @@ app.post('/api/account/leave-group', async (c) => {
   }
 });
 
-// Transactions endpoint for history page
+// Transactions endpoint for history page (tenant-based)
 app.get('/api/transactions', async (c) => {
   try {
     const user = c.get('user');
+    const tenant = c.get('tenant');
     const db = c.env.DB;
-    
-    // Get all shared user IDs (including linked accounts) - same as dashboard
-    const sharedUserIds = await getSharedUserIds(db, user.userId);
-    const userIdsStr = sharedUserIds.join(',');
-    
+
     // Get month filter if provided
     const month = c.req.query('month');
     let dateFilter = '';
     let readingDateFilter = '';
-    
+
     if (month) {
       dateFilter = `AND strftime('%Y-%m', purchase_date) = '${month}'`;
       readingDateFilter = `AND strftime('%Y-%m', reading_date) = '${month}'`;
       console.log(`Filtering by month: ${month}, dateFilter: ${dateFilter}, readingDateFilter: ${readingDateFilter}`);
     }
-    
-    // Get vouchers - use actual purchase_date for timestamp
+
+    // Get vouchers for the tenant (family) - use actual purchase_date for timestamp
     const vouchers = await db.prepare(`
-      SELECT 
+      SELECT
         'voucher' as type,
         id,
         user_id,
@@ -854,14 +897,14 @@ app.get('/api/transactions', async (c) => {
         kwh_amount,
         vat_amount,
         notes
-      FROM vouchers 
-      WHERE user_id IN (${userIdsStr}) ${dateFilter}
+      FROM vouchers
+      WHERE tenant_id = ? ${dateFilter}
       ORDER BY purchase_date DESC
-    `).all();
+    `).bind(tenant.id).all();
 
-    // Get readings - use actual reading_date for timestamp
+    // Get readings for the tenant (family) - use actual reading_date for timestamp
     const readings = await db.prepare(`
-      SELECT 
+      SELECT
         'reading' as type,
         id,
         user_id,
@@ -869,10 +912,10 @@ app.get('/api/transactions', async (c) => {
         reading_date,
         reading_date as date,
         notes
-      FROM readings 
-      WHERE user_id IN (${userIdsStr}) ${readingDateFilter}
+      FROM readings
+      WHERE tenant_id = ? ${readingDateFilter}
       ORDER BY reading_date DESC
-    `).all();
+    `).bind(tenant.id).all();
     
 
     return c.json({
@@ -1082,11 +1125,29 @@ app.get('/api/export/data', async (c) => {
 // Send family invitation via email
 app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) => {
   try {
-    const { email, recipientEmail, personalMessage } = await c.req.json();
+    console.log('=== Family Invitation Debug Start ===');
+
+    // Parse request data
+    let requestData;
+    try {
+      requestData = await c.req.json();
+      console.log('Request data parsed:', requestData);
+    } catch (error) {
+      console.error('Failed to parse request JSON:', error);
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+
+    const { email, recipientEmail, personalMessage } = requestData;
     const emailToUse = email || recipientEmail;
+    console.log('Email to use:', emailToUse);
+
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
+
+    console.log('User:', user?.userId, user?.email);
+    console.log('Tenant:', tenant?.id, tenant?.name, tenant?.role);
+    console.log('DB available:', !!db);
 
     // Validate admin role
     if (tenant.role !== 'admin') {
@@ -1146,16 +1207,37 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     const emailInvitationId = emailInvitationResult.meta.last_row_id;
 
     // Send email
+    console.log('Creating email service...');
+    console.log('Environment vars available:', {
+      RESEND_API_KEY: !!c.env.RESEND_API_KEY,
+      FROM_EMAIL: c.env.FROM_EMAIL,
+      BASE_URL: c.env.BASE_URL
+    });
+
     const emailService = new CloudflareEmailService(c.env);
-    const emailResult = await emailService.sendFamilyInvitation({
+    console.log('Email service created successfully');
+
+    const invitationData = {
       recipientEmail: emailToUse,
-      senderName: user.name || user.email,
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
       senderEmail: user.email,
       inviteCode,
       tenantName: tenant.name,
       personalMessage,
-      emailInvitationId
-    });
+      emailInvitationId,
+      registrationUrl: `https://powermeter.app/register?invite=${encodeURIComponent(inviteCode)}&email=${encodeURIComponent(emailToUse)}`,
+      unsubscribeUrl: `https://powermeter.app/api/invitations/unsubscribe/${emailInvitationId}`
+    };
+    console.log('Sending email with data:', invitationData);
+
+    let emailResult;
+    try {
+      emailResult = await emailService.sendFamilyInvitation(invitationData);
+      console.log('Email send result:', emailResult);
+    } catch (emailError) {
+      console.error('Email service error:', emailError);
+      return c.json({ error: 'Failed to send invitation email: ' + emailError.message }, 500);
+    }
 
     if (!emailResult.success) {
       console.error('Email sending failed:', emailResult.error);
@@ -1193,8 +1275,16 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
     });
 
   } catch (error) {
-    console.error('Family invitation error:', error);
-    return c.json({ error: 'Failed to send family invitation' }, 500);
+    console.error('=== Family Invitation Error ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error object:', error);
+    console.error('=== End Error Debug ===');
+    return c.json({
+      error: 'Failed to send family invitation',
+      details: error.message,
+      stack: error.stack
+    }, 500);
   }
 });
 
@@ -1238,7 +1328,7 @@ app.post('/api/invitations/new-account', authMiddleware, tenantMiddleware, async
     const emailService = new CloudflareEmailService(c.env);
     const emailResult = await emailService.sendNewAccountInvitation({
       recipientEmail: emailToUse,
-      senderName: user.name || user.email,
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
       referralCode,
       personalMessage,
       emailInvitationId
@@ -1298,12 +1388,52 @@ app.get('/api/invitations', authMiddleware, tenantMiddleware, async (c) => {
 
     return c.json({
       success: true,
-      invitations: invitations.results || []
+      data: invitations.results || []
     });
 
   } catch (error) {
     console.error('Get invitations error:', error);
     return c.json({ error: 'Failed to get invitations' }, 500);
+  }
+});
+
+// Clear all sent invitations for the tenant
+app.post('/api/invitations/clear', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Count existing invitations before deletion
+    const countResult = await db.prepare(`
+      SELECT COUNT(*) as count FROM email_invitations
+      WHERE tenant_id = ?
+    `).bind(tenant.id).first();
+
+    const existingCount = countResult.count || 0;
+
+    if (existingCount === 0) {
+      return c.json({
+        success: true,
+        deletedCount: 0,
+        message: 'No invitations to clear'
+      });
+    }
+
+    // Delete all email invitations for this tenant
+    await db.prepare(`
+      DELETE FROM email_invitations
+      WHERE tenant_id = ?
+    `).bind(tenant.id).run();
+
+    return c.json({
+      success: true,
+      deletedCount: existingCount,
+      message: `Successfully cleared ${existingCount} invitation records`
+    });
+
+  } catch (error) {
+    console.error('Clear invitations error:', error);
+    return c.json({ error: 'Failed to clear invitations' }, 500);
   }
 });
 
@@ -1407,6 +1537,230 @@ app.get('/api/invitations/unsubscribe/:emailId', async (c) => {
   }
 });
 
+// Generate shareable invitation link
+app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { recipientEmail, personalMessage } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    if (!recipientEmail) {
+      return c.json({ error: 'Recipient email is required' }, 400);
+    }
+
+    // Generate invite code for the tenant
+    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase() +
+                       Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // Create invite code record
+    const inviteResult = await db.prepare(`
+      INSERT INTO invite_codes (
+        code, tenant_id, created_by, expires_at, max_uses, current_uses, is_active
+      ) VALUES (?, ?, ?, ?, 1, 0, 1)
+    `).bind(
+      inviteCode,
+      tenant.id,
+      user.userId,
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    ).run();
+
+    // Create shareable token (encoded invitation data)
+    const invitationData = {
+      senderName: user.name || getFriendlyNameFromEmail(user.email),
+      senderEmail: user.email,
+      tenantName: tenant.name,
+      inviteCode,
+      personalMessage: personalMessage || null,
+      recipientEmail,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    // Create a simple token (base64 encoded JSON)
+    const token = btoa(JSON.stringify(invitationData));
+    const inviteUrl = `https://powermeter.app/invite?token=${encodeURIComponent(token)}`;
+
+    // Generate WhatsApp message
+    const whatsappMessage = `🌟 *You're invited to PowerMeter!*\n\nHi! ${invitationData.senderName} has invited you to join their family electricity tracking account on PowerMeter.\n\n⚡ *What you'll get:*\n• Track electricity usage together\n• Add vouchers and meter readings\n• See family consumption trends\n• Manage household spending\n\n🔑 *Your invite code:* ${inviteCode}\n\n👆 Click the link to join: ${inviteUrl}\n\n${personalMessage ? `💬 *Personal message:* "${personalMessage}"\n\n` : ''}--\nPowerMeter - Track your electricity usage together! 🏠⚡`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+
+    // Create email invitation record for tracking
+    const emailInvitationId = Math.random().toString(36).substring(2, 15);
+    await db.prepare(`
+      INSERT INTO email_invitations (
+        id, tenant_id, sender_user_id, recipient_email, invitation_type,
+        invite_code, email_subject, email_body_html, email_body_text,
+        expires_at, sent_at, status, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
+    `).bind(
+      emailInvitationId,
+      tenant.id,
+      user.userId,
+      recipientEmail,
+      'family',
+      inviteCode,
+      `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
+      `Generated shareable link: ${inviteUrl}`,
+      whatsappMessage,
+      invitationData.expiresAt,
+      JSON.stringify({ method: 'link', inviteUrl: inviteUrl, whatsappUrl })
+    ).run();
+
+    return c.json({
+      success: true,
+      data: {
+        inviteUrl,
+        whatsappUrl,
+        inviteCode,
+        expiresAt: invitationData.expiresAt,
+        message: whatsappMessage
+      }
+    });
+
+  } catch (error) {
+    console.error('Generate link error:', error);
+    return c.json({ error: 'Failed to generate invitation link' }, 500);
+  }
+});
+
+// Get invitation details from token (for the invite page)
+app.get('/api/invitations/details', async (c) => {
+  try {
+    const token = c.req.query('token');
+
+    if (!token) {
+      return c.json({ error: 'Token is required' }, 400);
+    }
+
+    // Decode the token
+    let invitationData;
+    try {
+      invitationData = JSON.parse(atob(token));
+    } catch (e) {
+      return c.json({ error: 'Invalid token' }, 400);
+    }
+
+    // Check if invitation has expired
+    if (new Date() > new Date(invitationData.expiresAt)) {
+      return c.json({ error: 'Invitation has expired' }, 400);
+    }
+
+    // Return invitation details (without sensitive info)
+    return c.json({
+      success: true,
+      data: {
+        senderName: invitationData.senderName,
+        tenantName: invitationData.tenantName,
+        inviteCode: invitationData.inviteCode,
+        personalMessage: invitationData.personalMessage,
+        expiresAt: invitationData.expiresAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Get invitation details error:', error);
+    return c.json({ error: 'Failed to load invitation details' }, 500);
+  }
+});
+
+// Remove family member from tenant
+app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { userId } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    console.log('=== Remove Member Debug ===');
+    console.log('User:', user?.userId, user?.email);
+    console.log('Tenant:', tenant?.id, tenant?.name, tenant?.role);
+    console.log('Target user ID:', userId);
+
+    // Validate admin role
+    if (tenant.role !== 'admin') {
+      console.log('Permission denied - user role is:', tenant.role, 'but admin required');
+      return c.json({ error: 'Admin role required to remove family members' }, 403);
+    }
+
+    if (!userId) {
+      return c.json({ error: 'User ID is required' }, 400);
+    }
+
+    // Prevent admin from removing themselves
+    if (userId === user.userId) {
+      return c.json({ error: 'Cannot remove yourself from the family' }, 400);
+    }
+
+    // Check if user exists in this tenant
+    const memberToRemove = await db.prepare(`
+      SELECT tu.*, u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.tenant_id = ? AND tu.user_id = ?
+    `).bind(tenant.id, userId).first();
+
+    console.log('Member to remove:', memberToRemove);
+
+    if (!memberToRemove) {
+      console.log('Member not found in tenant');
+      return c.json({ error: 'User is not a member of this family' }, 404);
+    }
+
+    // Note: We allow admins to remove other admins, but not themselves (already checked above)
+    // This allows family management flexibility while preventing self-removal
+
+    console.log('Proceeding with removal - member role is:', memberToRemove.role);
+
+    // Check if user is a member of any other tenants
+    const otherTenantMemberships = await db.prepare(`
+      SELECT COUNT(*) as count FROM tenant_users
+      WHERE user_id = ? AND tenant_id != ?
+    `).bind(userId, tenant.id).first();
+
+    console.log('User has other tenant memberships:', otherTenantMemberships.count);
+
+    if (otherTenantMemberships.count === 0) {
+      // User is only in this tenant, so delete the user entirely
+      console.log('Deleting user entirely (no other tenants)');
+
+      // Delete from tenant_users first (foreign key constraint)
+      await db.prepare(`
+        DELETE FROM tenant_users
+        WHERE tenant_id = ? AND user_id = ?
+      `).bind(tenant.id, userId).run();
+
+      // Delete the user record
+      await db.prepare(`
+        DELETE FROM users
+        WHERE id = ?
+      `).bind(userId).run();
+
+      console.log('User completely deleted');
+    } else {
+      // User is in other tenants, just remove from this tenant
+      console.log('User has other tenants, just removing from this tenant');
+      await db.prepare(`
+        DELETE FROM tenant_users
+        WHERE tenant_id = ? AND user_id = ?
+      `).bind(tenant.id, userId).run();
+    }
+
+    return c.json({
+      success: true,
+      message: `${memberToRemove.email} has been removed from the family`,
+      removedUser: {
+        email: memberToRemove.email,
+        userId: userId
+      }
+    });
+
+  } catch (error) {
+    console.error('Remove family member error:', error);
+    return c.json({ error: 'Failed to remove family member' }, 500);
+  }
+});
+
 // Serve static files from public directory - exclude API routes
 app.get('/css/*', serveStatic({ root: './public' }));
 app.get('/js/*', serveStatic({ root: './public' }));
@@ -1422,5 +1776,6 @@ app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
 app.get('/reading', serveStatic({ path: './public/reading.html' }));
 app.get('/history', serveStatic({ path: './public/history.html' }));
 app.get('/settings', serveStatic({ path: './public/settings.html' }));
+app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
 export default app;

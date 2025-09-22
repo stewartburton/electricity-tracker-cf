@@ -61,7 +61,38 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const ET = window.ElectricityTracker;
-            
+
+            // Parse URL parameters for email invitation
+            const urlParams = new URLSearchParams(window.location.search);
+            const inviteCode = urlParams.get('invite');
+            const email = urlParams.get('email');
+
+            // Pre-populate fields if coming from email invitation
+            if (inviteCode) {
+                // Switch to invite mode
+                document.getElementById('registrationMethod').value = 'invite';
+                toggleRegistrationFields();
+
+                // Pre-populate invite code
+                document.getElementById('inviteCode').value = inviteCode;
+
+                // Show welcome message
+                const authCard = document.querySelector('.auth-card');
+                const welcomeDiv = document.createElement('div');
+                welcomeDiv.style.cssText = 'background: #e8f5e8; border: 1px solid #28a745; padding: 15px; margin-bottom: 20px; border-radius: 5px; text-align: center;';
+                welcomeDiv.innerHTML = `
+                    <strong>🎉 Welcome!</strong><br>
+                    You've been invited to join a PowerMeter family account.<br>
+                    Complete your registration below to get started.
+                `;
+                authCard.insertBefore(welcomeDiv, authCard.querySelector('.auth-form'));
+            }
+
+            // Pre-populate email if provided
+            if (email) {
+                document.getElementById('regEmail').value = email;
+            }
+
             // Redirect if already logged in
             if (ET.auth.isAuthenticated()) {
                 window.location.href = '/dashboard';

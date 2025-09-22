@@ -126,7 +126,10 @@
                             <label for="familyMessage">Personal Message (optional):</label>
                             <textarea id="familyMessage" placeholder="Hey! I'd love to share our electricity tracking with you..." rows="3"></textarea>
                         </div>
-                        <button type="submit" class="primary-btn" style="width: 100%;">Send Family Invite</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="submit" class="primary-btn" style="flex: 1;">Send Family Invite</button>
+                            <button type="button" class="secondary-btn" onclick="generateFamilyLink()" style="flex: 1;">📱 Generate Link</button>
+                        </div>
                     </form>
                 </div>
 
@@ -144,14 +147,24 @@
                             <label for="newAccountMessage">Personal Message (optional):</label>
                             <textarea id="newAccountMessage" placeholder="I think you'd love PowerMeter for tracking your electricity usage..." rows="3"></textarea>
                         </div>
-                        <button type="submit" class="primary-btn" style="width: 100%;">Send Referral Invite</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="submit" class="primary-btn" style="flex: 1;">Send Referral Invite</button>
+                            <button type="button" class="secondary-btn" onclick="generateReferralLink()" style="flex: 1;">📱 Generate Link</button>
+                        </div>
                     </form>
                 </div>
             </div>
 
             <!-- Sent Invitations List -->
             <div style="border-top: 1px solid #e5e7eb; padding-top: 20px;">
-                <h3>📬 Sent Invitations</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📬 Sent Invitations</h3>
+                    <button onclick="clearAllInvitations()"
+                            style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px;"
+                            title="Clear all sent invitations">
+                        🗑️ Clear All
+                    </button>
+                </div>
                 <div id="sentInvitationsList">
                     <div style="text-align: center; color: #666; padding: 20px;">
                         Loading sent invitations...
@@ -284,12 +297,26 @@
                         <div class="recent-list">
                     `;
                     accountData.linkedAccounts.forEach(account => {
+                        // Don't show remove button for current user or if current user isn't admin
+                        const isCurrentUser = account.user_id === accountData.user.id;
+                        const canRemove = accountData.user.role === 'admin' && !isCurrentUser;
+
                         html += `
                             <div class="recent-item">
-                                <span>📧 ${account.email}</span>
+                                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                    <span>📧 ${account.email}</span>
+                                    ${isCurrentUser ? '<small style="color: #007bff; font-weight: bold;">(You)</small>' : ''}
+                                </div>
                                 <div style="display: flex; gap: 10px; align-items: center;">
                                     <small>${account.role.charAt(0).toUpperCase() + account.role.slice(1)}</small>
                                     <small>${new Date(account.joined_at).toLocaleDateString()}</small>
+                                    ${canRemove ? `
+                                        <button onclick="removeFamilyMember('${account.user_id}', '${account.email}')"
+                                                style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; margin-left: 5px;"
+                                                title="Remove from family">
+                                            🗑️
+                                        </button>
+                                    ` : ''}
                                 </div>
                             </div>
                         `;
@@ -448,25 +475,59 @@
                     return;
                 }
 
-                let html = '<div class="recent-list">';
+                // Group invitations by recipient email and type
+                const groupedInvitations = {};
                 invitations.forEach(invitation => {
+                    const key = `${invitation.invitation_type}:${invitation.recipient_email}`;
+
+                    if (!groupedInvitations[key]) {
+                        groupedInvitations[key] = {
+                            ...invitation,
+                            count: 1,
+                            latestSentAt: invitation.sent_at
+                        };
+                    } else {
+                        groupedInvitations[key].count++;
+
+                        // Keep the most recent send date and best status
+                        if (new Date(invitation.sent_at) > new Date(groupedInvitations[key].latestSentAt)) {
+                            groupedInvitations[key].latestSentAt = invitation.sent_at;
+                        }
+
+                        // Update to better status if available (clicked > opened > sent)
+                        const statusPriority = { 'clicked': 3, 'opened': 2, 'sent': 1 };
+                        if (statusPriority[invitation.status] > statusPriority[groupedInvitations[key].status]) {
+                            groupedInvitations[key].status = invitation.status;
+                            groupedInvitations[key].opened_at = invitation.opened_at;
+                            groupedInvitations[key].clicked_at = invitation.clicked_at;
+                        }
+                    }
+                });
+
+                // Convert back to array and sort by latest send date
+                const groupedArray = Object.values(groupedInvitations)
+                    .sort((a, b) => new Date(b.latestSentAt) - new Date(a.latestSentAt));
+
+                let html = '<div class="recent-list">';
+                groupedArray.forEach(invitation => {
                     const statusColor = invitation.status === 'sent' ? '#28a745' :
                                       invitation.status === 'opened' ? '#ffc107' :
                                       invitation.status === 'clicked' ? '#17a2b8' : '#6c757d';
 
                     const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' : '🌟 Referral';
+                    const countLabel = invitation.count > 1 ? ` <span style="color: #666; font-size: 14px;">x${invitation.count}</span>` : '';
 
                     html += `
                         <div class="recent-item" style="align-items: flex-start;">
                             <div style="flex: 1;">
                                 <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 5px;">
-                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}</span>
+                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}${countLabel}</span>
                                     <span style="color: ${statusColor}; font-size: 12px; padding: 2px 8px; background: ${statusColor}20; border-radius: 12px;">
                                         ${invitation.status.toUpperCase()}
                                     </span>
                                 </div>
                                 <div style="font-size: 12px; color: #666;">
-                                    Sent: ${new Date(invitation.sent_at).toLocaleDateString()}
+                                    ${invitation.count > 1 ? 'Last sent' : 'Sent'}: ${new Date(invitation.latestSentAt).toLocaleDateString()}
                                     ${invitation.opened_at ? ` • Opened: ${new Date(invitation.opened_at).toLocaleDateString()}` : ''}
                                     ${invitation.clicked_at ? ` • Clicked: ${new Date(invitation.clicked_at).toLocaleDateString()}` : ''}
                                 </div>
@@ -478,6 +539,40 @@
 
                 container.innerHTML = html;
             }
+
+            // Clear all sent invitations
+            window.clearAllInvitations = async function() {
+                if (!confirm('Are you sure you want to clear all sent invitations? This action cannot be undone.')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/invitations/clear', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`Successfully cleared ${data.deletedCount} invitation records.`);
+                        // Reload the invitations list
+                        loadSentInvitations();
+                    } else {
+                        alert('Failed to clear invitations: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Clear invitations error:', error);
+                    alert(error.message || 'Failed to clear invitations');
+                }
+            };
 
             // Family invitation form handler
             document.getElementById('sendFamilyInviteForm').addEventListener('submit', async (e) => {
@@ -504,7 +599,15 @@
                     }
                 } catch (error) {
                     console.error('Send family invitation error:', error);
-                    alert(error.message || 'Failed to send family invitation');
+
+                    // Handle testing mode limitation with helpful message
+                    const errorMessage = error.message || 'Failed to send family invitation';
+                    if (errorMessage.includes('Resend is in testing mode')) {
+                        const helpfulMessage = `${errorMessage}\n\n💡 For testing: Try sending the invitation to stewart.burton84@gmail.com instead, or contact support to verify your domain for production use.`;
+                        alert(helpfulMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Send Family Invite';
@@ -536,7 +639,15 @@
                     }
                 } catch (error) {
                     console.error('Send new account invitation error:', error);
-                    alert(error.message || 'Failed to send referral invitation');
+
+                    // Handle testing mode limitation with helpful message
+                    const errorMessage = error.message || 'Failed to send referral invitation';
+                    if (errorMessage.includes('Resend is in testing mode')) {
+                        const helpfulMessage = `${errorMessage}\n\n💡 For testing: Try sending the invitation to stewart.burton84@gmail.com instead, or contact support to verify your domain for production use.`;
+                        alert(helpfulMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Send Referral Invite';
@@ -561,12 +672,208 @@
                 link.addEventListener('click', function() {
                     const navLinks = document.getElementById('navLinks');
                     const hamburgerMenu = document.getElementById('hamburgerMenu');
-                    
+
                     navLinks.classList.remove('active');
                     hamburgerMenu.classList.remove('active');
                 });
             });
+
+            // Remove family member
+            window.removeFamilyMember = async function(userId, email) {
+                if (!confirm(`Are you sure you want to remove ${email} from your family account? This action cannot be undone.`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/family/remove-member', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: JSON.stringify({
+                            userId: userId
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`${email} has been removed from your family account.`);
+                        // Reload the account info to update the display
+                        loadAccountInfo();
+                    } else {
+                        alert('Failed to remove family member: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Remove family member error:', error);
+                    alert(error.message || 'Failed to remove family member');
+                }
+            };
         });
+
+        // Generate family invitation link
+        async function generateFamilyLink() {
+            const email = document.getElementById('familyEmail').value || 'recipient@example.com';
+            const personalMessage = document.getElementById('familyMessage').value;
+
+            try {
+                // Check if ET is available
+                if (!window.ElectricityTracker) {
+                    alert('Application is still loading. Please try again in a moment.');
+                    return;
+                }
+
+                const response = await fetch('/api/invitations/generate-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data && data.success) {
+                    showInvitationModal(data.data, 'family');
+                } else {
+                    alert('Failed to generate invitation link: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Generate family link error:', error);
+                alert(error.message || 'Failed to generate invitation link');
+            }
+        }
+
+        // Generate referral invitation link
+        async function generateReferralLink() {
+            const email = document.getElementById('newAccountEmail').value || 'recipient@example.com';
+            const personalMessage = document.getElementById('newAccountMessage').value;
+
+            try {
+                // Check if ET is available
+                if (!window.ElectricityTracker) {
+                    alert('Application is still loading. Please try again in a moment.');
+                    return;
+                }
+
+                const response = await fetch('/api/invitations/generate-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data && data.success) {
+                    showInvitationModal(data.data, 'referral');
+                } else {
+                    alert('Failed to generate invitation link: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Generate referral link error:', error);
+                alert(error.message || 'Failed to generate invitation link');
+            }
+        }
+
+        // Show invitation modal with links
+        function showInvitationModal(inviteData, type) {
+            const typeName = type === 'family' ? 'Family' : 'Referral';
+
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.5); z-index: 1000; display: flex;
+                align-items: center; justify-content: center;
+            `;
+
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+                    <h2>📱 ${typeName} Invitation Link Generated!</h2>
+
+                    <div style="margin: 20px 0;">
+                        <h3>🔗 Direct Link:</h3>
+                        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 14px;">
+                            ${inviteData.inviteUrl}
+                        </div>
+                        <button onclick="copyToClipboard('${inviteData.inviteUrl}')" style="margin-top: 10px; padding: 8px 16px; background: #c27d18; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📋 Copy Link
+                        </button>
+                    </div>
+
+                    <div style="margin: 20px 0;">
+                        <h3>💬 WhatsApp Message:</h3>
+                        <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; white-space: pre-line; font-size: 14px; max-height: 200px; overflow-y: auto;">
+${inviteData.message}
+                        </div>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button onclick="copyToClipboard(\`${inviteData.message.replace(/`/g, '\\`')}\`)" style="padding: 8px 16px; background: #25d366; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                📋 Copy Message
+                            </button>
+                            <a href="${inviteData.whatsappUrl}" target="_blank" style="padding: 8px 16px; background: #25d366; color: white; border: none; border-radius: 4px; text-decoration: none; display: inline-block;">
+                                📱 Open WhatsApp
+                            </a>
+                        </div>
+                    </div>
+
+                    <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <p><strong>Invitation Code:</strong> ${inviteData.inviteCode}</p>
+                        <p><strong>Expires:</strong> ${new Date(inviteData.expiresAt).toLocaleDateString()}</p>
+                    </div>
+
+                    <button onclick="this.parentElement.parentElement.remove()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+                        Close
+                    </button>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Close modal when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
+        // Copy to clipboard helper
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Copied to clipboard!');
+            });
+        }
     </script>
 </body>
 </html>
