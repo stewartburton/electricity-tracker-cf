@@ -38,7 +38,8 @@
       "Bash(npm update:*)",
       "WebFetch(domain:resend.com)",
       "WebSearch",
-      "Bash(pgrep:*)"
+      "Bash(pgrep:*)",
+      "Bash(gh pr view:*)"
     ],
     "deny": [],
     "ask": []

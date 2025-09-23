@@ -1589,10 +1589,10 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
     const emailInvitationId = Math.random().toString(36).substring(2, 15);
     await db.prepare(`
       INSERT INTO email_invitations (
-        id, tenant_id, sender_user_id, recipient_email, invitation_type,
+        id, tenant_id, sent_by_user_id, recipient_email, invitation_type,
         invite_code, email_subject, email_body_html, email_body_text,
-        expires_at, sent_at, status, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
+        expires_at, status, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'link_generated', ?)
     `).bind(
       emailInvitationId,
       tenant.id,
