@@ -516,7 +516,8 @@
 
                     const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' :
                                       invitation.invitation_type === 'referral' ? '🌟 New Account' :
-                                      invitation.invitation_type === 'link' ? '📱 WhatsApp Link' : '❓ Unknown';
+                                      (invitation.invitation_type === 'new_account' && invitation.recipient_email === 'whatsapp-shareable-link') ? '📱 WhatsApp Link' :
+                                      invitation.invitation_type === 'new_account' ? '🌟 New Account' : '❓ Unknown';
                     const countLabel = invitation.count > 1 ? ` <span style="color: #666; font-size: 14px;">x${invitation.count}</span>` : '';
 
                     html += `

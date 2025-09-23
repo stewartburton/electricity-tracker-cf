@@ -1596,7 +1596,7 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
       tenant.id,
       user.userId,
       'whatsapp-shareable-link',
-      'link',
+      'new_account',
       inviteCode,
       `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
       `Generated shareable link: ${inviteUrl}`,
