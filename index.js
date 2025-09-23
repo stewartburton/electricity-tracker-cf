@@ -1585,16 +1585,14 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
 
-    // Create email invitation record for tracking
-    const emailInvitationId = Math.random().toString(36).substring(2, 15);
+    // Create email invitation record for tracking (let id auto-increment)
     await db.prepare(`
       INSERT INTO email_invitations (
-        id, tenant_id, sent_by_user_id, recipient_email, invitation_type,
+        tenant_id, sent_by_user_id, recipient_email, invitation_type,
         invite_code, email_subject, email_body_html, email_body_text,
         expires_at, status, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'link_generated', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', ?)
     `).bind(
-      emailInvitationId,
       tenant.id,
       user.userId,
       recipientEmail,
