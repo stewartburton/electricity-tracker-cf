@@ -514,7 +514,9 @@
                                       invitation.status === 'opened' ? '#ffc107' :
                                       invitation.status === 'clicked' ? '#17a2b8' : '#6c757d';
 
-                    const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' : '🌟 Referral';
+                    const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' :
+                                      invitation.invitation_type === 'referral' ? '🌟 New Account' :
+                                      invitation.invitation_type === 'link' ? '📱 WhatsApp Link' : '❓ Unknown';
                     const countLabel = invitation.count > 1 ? ` <span style="color: #666; font-size: 14px;">x${invitation.count}</span>` : '';
 
                     html += `

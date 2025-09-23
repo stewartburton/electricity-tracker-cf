@@ -1195,7 +1195,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
         tenant_id, sent_by_user_id, invitation_type, recipient_email,
         invite_code, email_subject, email_body_html, email_body_text,
         expires_at
-      ) VALUES (?, ?, 'family', ?, ?, 'temp', 'temp', 'temp', ?)
+      ) VALUES (?, ?, 'referral', ?, ?, 'temp', 'temp', 'temp', ?)
     `).bind(
       tenant.id,
       user.userId,
@@ -1595,8 +1595,8 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
     `).bind(
       tenant.id,
       user.userId,
-      recipientEmail,
-      'family',
+      'whatsapp-shareable-link',
+      'link',
       inviteCode,
       `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
       `Generated shareable link: ${inviteUrl}`,
