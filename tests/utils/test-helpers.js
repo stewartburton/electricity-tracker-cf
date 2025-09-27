@@ -7,7 +7,7 @@ const { expect } = require('@playwright/test');
 class TestHelpers {
   constructor(page) {
     this.page = page;
-    this.baseURL = 'https://electricity-tracker.electricity-monitor.workers.dev';
+    this.baseURL = process.env.TEST_BASE_URL || 'https://electricity-tracker.electricity-monitor.workers.dev';
     this.registrationKey = process.env.TEST_REGISTRATION_KEY || 'test-key-placeholder';
   }
 

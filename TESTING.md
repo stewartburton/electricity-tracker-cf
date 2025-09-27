@@ -90,6 +90,7 @@ tests/
 ├── core-functionality.spec.js # Core app functionality tests
 ├── account-management.spec.js  # Household management tests
 ├── data-cleanup.spec.js     # Data cleanup tests
+├── password-reset.spec.js   # Forgot/reset password flow tests
 ├── test-runner.js           # Custom test runner with utilities
 ├── global-setup.js          # Global test setup
 └── global-teardown.js       # Global test cleanup
@@ -135,6 +136,13 @@ tests/
 - Concurrent cleanup operations
 - Manual cleanup utilities
 
+### Password Reset Tests (`password-reset.spec.js`)
+
+- Verifies the password reset migration is active by exercising the request API
+- Asserts password reset emails are dispatched through the configured email provider
+- Covers the UI flow from the login "Forgot password" link through reset confirmation
+- Confirms users can log in with the new password and that reset tokens become single-use
+
 ## 🔧 Configuration
 
 ### Playwright Configuration (`playwright.config.js`)
@@ -153,7 +161,9 @@ The test suite is configured to:
 - **Unique Test Emails**: Each test generates unique email addresses using timestamps
 - **Secure Passwords**: Tests use dynamically generated secure passwords
 - **Automatic Cleanup**: All test data is tracked and cleaned up automatically
-- **Registration Key**: Tests use environment variable TEST_REGISTRATION_KEY
+- **Registration Key**: Tests use environment variable `TEST_REGISTRATION_KEY`
+- **Password Reset Debugging**: Set `ENABLE_RESET_TOKEN_DEBUG=true` to allow automated tests to retrieve reset tokens
+- **Email Dispatch**: Configure `FROM_EMAIL` and one of `RESEND_API_KEY`, `MAILGUN_API_KEY`, or Cloudflare `SEND_EMAIL` binding so password reset tests can verify outbound email
 
 ## 📊 Test Reports
 

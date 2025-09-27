@@ -167,6 +167,60 @@ class CloudflareEmailService {
         </div>
     </div>
 </body>
+</html>`,
+
+      'password-reset.html': `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset your {{productName}} password</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 24px; background: #f3f4f6; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(148, 163, 184, 0.2); }
+        .header { background: linear-gradient(135deg, #c27d18 0%, #a16207 100%); color: #ffffff; padding: 32px 28px; text-align: center; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .header p { margin: 8px 0 0; font-size: 16px; opacity: 0.9; }
+        .content { padding: 32px 28px; }
+        .content h2 { margin-top: 0; font-size: 22px; color: #111827; }
+        .content p { margin-bottom: 18px; }
+        .button { display: inline-block; padding: 14px 28px; background: #c27d18; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 18px 0; }
+        .button:hover { background: #a16207; }
+        .muted { color: #6b7280; font-size: 14px; }
+        .fallback { background: #f9fafb; border-left: 4px solid #c27d18; padding: 16px; border-radius: 8px; word-break: break-word; }
+        .footer { padding: 24px 28px; background: #f9fafb; font-size: 13px; color: #6b7280; text-align: center; }
+        .footer a { color: #c27d18; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ {{productName}}</h1>
+            <p>Password reset requested</p>
+        </div>
+        <div class="content">
+            <h2>Hi {{friendlyName}},</h2>
+            <p>We received a request to reset the password for your {{productName}} account. If this was you, click the button below to choose a new password.</p>
+            <p style="text-align: center;">
+                <a href="{{resetUrl}}" class="button">Reset Password</a>
+            </p>
+            <p class="muted">This link will expire in {{expiresInMinutes}} minutes for your security and can only be used once.</p>
+            <div class="fallback">
+                <strong>Button not working?</strong>
+                <p>Copy and paste this link into your browser:<br><a href="{{resetUrl}}">{{resetUrl}}</a></p>
+            </div>
+            <p>If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+            {{#if supportUrl}}
+            <p class="muted">Need help? Visit <a href="{{supportUrl}}">Support</a>.</p>
+            {{/if}}
+        </div>
+        <div class="footer">
+            <p>You are receiving this email because a password reset was requested at {{baseUrl}}.</p>
+            <p>If you no longer wish to receive these alerts, please update your account settings.</p>
+        </div>
+    </div>
+</body>
 </html>`
     };
 
@@ -174,6 +228,15 @@ class CloudflareEmailService {
   }
 
   async sendEmail(to, subject, htmlContent, textContent) {
+    if (this.env.EMAIL_TEST_MODE === 'true') {
+      return {
+        success: true,
+        data: {
+          id: `test-email-${Date.now()}`
+        }
+      };
+    }
+
     // Option 1: Use Cloudflare's built-in email sending (if available)
     if (this.env.SEND_EMAIL) {
       try {
@@ -342,6 +405,49 @@ class CloudflareEmailService {
       success: result.success,
       error: result.error,
       subject: subject,
+      htmlBody: htmlContent,
+      textBody: textContent,
+      messageId: result.data?.id || 'unknown',
+      threadId: result.data?.id || 'unknown'
+    };
+  }
+
+  async sendPasswordResetEmail(data) {
+    if (!data?.recipientEmail) {
+      throw new Error('recipientEmail is required for password reset emails');
+    }
+
+    if (!data?.resetUrl) {
+      throw new Error('resetUrl is required for password reset emails');
+    }
+
+    const baseUrl = (data.baseUrl || this.baseUrl || '').replace(/\/$/, '');
+    const templateVariables = {
+      friendlyName: data.friendlyName || 'there',
+      resetUrl: data.resetUrl,
+      expiresInMinutes: data.expiresInMinutes || 60,
+      supportUrl: data.supportUrl || '',
+      productName: data.productName || 'PowerMeter',
+      baseUrl: baseUrl || 'https://powermeter.app'
+    };
+
+    const template = this.getTemplate('password-reset.html');
+    const htmlContent = this.renderTemplate(template, templateVariables);
+    const textContent = this.htmlToText(htmlContent);
+
+    const subject = `${templateVariables.productName} password reset instructions`;
+
+    const result = await this.sendEmail(
+      data.recipientEmail,
+      subject,
+      htmlContent,
+      textContent
+    );
+
+    return {
+      success: result.success,
+      error: result.error,
+      subject,
       htmlBody: htmlContent,
       textBody: textContent,
       messageId: result.data?.id || 'unknown',

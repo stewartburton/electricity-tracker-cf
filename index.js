@@ -3,6 +3,7 @@ import { serveStatic } from 'hono/cloudflare-workers';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import CloudflareEmailService from './services/cloudflareEmailService.js';
 
 // Helper function to extract a friendly name from email address
@@ -24,6 +25,21 @@ function getFriendlyNameFromEmail(email) {
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
 
   return capitalizedParts.join(' ') || 'User';
+}
+
+const RESET_TOKEN_EXPIRY_MINUTES = 60;
+
+function generatePasswordResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function hashPasswordResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getBaseUrl(env) {
+  const base = env.BASE_URL || 'https://powermeter.app';
+  return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
 const app = new Hono();
@@ -287,6 +303,206 @@ app.post('/api/auth/register', async (c) => {
 
   } catch (error) {
     console.error('Registration error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.post('/api/auth/forgot-password', async (c) => {
+  try {
+    const { email } = await c.req.json();
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return c.json({
+        success: true,
+        message: 'If that email address exists in our system, a password reset link has been sent.',
+        emailDispatched: false
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const db = c.env.DB;
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE expires_at < datetime('now')
+    `).run();
+
+    const user = await db.prepare(`
+      SELECT id, email
+      FROM users
+      WHERE LOWER(email) = ?
+    `).bind(normalizedEmail).first();
+
+    if (!user) {
+      return c.json({
+        success: true,
+        message: 'If that email address exists in our system, a password reset link has been sent.',
+        emailDispatched: false
+      });
+    }
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE user_id = ?
+    `).bind(user.id).run();
+
+    const token = generatePasswordResetToken();
+    const tokenHash = hashPasswordResetToken(token);
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const requestIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null;
+    const userAgent = c.req.header('User-Agent') || null;
+
+    await db.prepare(`
+      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, requested_ip, requested_user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(user.id, tokenHash, expiresAt, requestIp, userAgent).run();
+
+    const emailService = new CloudflareEmailService(c.env);
+    const baseUrl = getBaseUrl(c.env);
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+    let emailDispatched = false;
+
+    try {
+      const emailResult = await emailService.sendPasswordResetEmail({
+        recipientEmail: user.email,
+        friendlyName: getFriendlyNameFromEmail(user.email),
+        resetUrl,
+        expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
+        baseUrl
+      });
+
+      if (!emailResult.success) {
+        console.error('Password reset email send failed:', emailResult.error);
+      } else {
+        emailDispatched = true;
+      }
+    } catch (emailError) {
+      console.error('Password reset email error:', emailError);
+    }
+
+    const responsePayload = {
+      success: true,
+      message: 'If that email address exists in our system, a password reset link has been sent.',
+      emailDispatched
+    };
+
+    if (c.env.ENABLE_RESET_TOKEN_DEBUG === 'true') {
+      responsePayload.debugToken = token;
+    }
+
+    return c.json(responsePayload);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.get('/api/auth/reset-password/validate', async (c) => {
+  try {
+    const token = c.req.query('token');
+
+    if (!token) {
+      return c.json({ error: 'Token is required' }, 400);
+    }
+
+    const tokenHash = hashPasswordResetToken(token);
+    const db = c.env.DB;
+
+    const tokenRecord = await db.prepare(`
+      SELECT prt.*, u.email
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token_hash = ?
+      ORDER BY prt.created_at DESC
+      LIMIT 1
+    `).bind(tokenHash).first();
+
+    if (!tokenRecord) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    if (tokenRecord.used_at) {
+      return c.json({ error: 'This reset link has already been used' }, 400);
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    return c.json({
+      success: true,
+      valid: true,
+      email: tokenRecord.email
+    });
+  } catch (error) {
+    console.error('Validate reset token error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.post('/api/auth/reset-password', async (c) => {
+  try {
+    const { token, password } = await c.req.json();
+
+    if (typeof token !== 'string' || !token.trim() || typeof password !== 'string') {
+      return c.json({ error: 'Token and new password are required' }, 400);
+    }
+
+    if (password.length < 6) {
+      return c.json({ error: 'Password must be at least 6 characters' }, 400);
+    }
+
+    const tokenHash = hashPasswordResetToken(token.trim());
+    const db = c.env.DB;
+
+    const tokenRecord = await db.prepare(`
+      SELECT prt.*, u.email
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token_hash = ?
+      ORDER BY prt.created_at DESC
+      LIMIT 1
+    `).bind(tokenHash).first();
+
+    if (!tokenRecord) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    if (tokenRecord.used_at) {
+      return c.json({ error: 'This reset link has already been used' }, 400);
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await db.prepare(`
+      UPDATE users
+      SET password = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(hashedPassword, tokenRecord.user_id).run();
+
+    await db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = datetime('now')
+      WHERE id = ?
+    `).bind(tokenRecord.id).run();
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE user_id = ? AND id != ?
+    `).bind(tokenRecord.user_id, tokenRecord.id).run();
+
+    return c.json({
+      success: true,
+      message: 'Password reset successful'
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
@@ -1768,6 +1984,8 @@ app.get('/favicon.ico', serveStatic({ root: './public' }));
 // Serve HTML pages
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.get('/login', serveStatic({ path: './public/login.html' }));
+app.get('/forgot-password', serveStatic({ path: './public/forgot-password.html' }));
+app.get('/reset-password', serveStatic({ path: './public/reset-password.html' }));
 app.get('/register', serveStatic({ path: './public/register.html' }));
 app.get('/dashboard', serveStatic({ path: './public/dashboard.html' }));
 app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
