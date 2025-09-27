@@ -1195,7 +1195,7 @@ app.post('/api/invitations/family', authMiddleware, tenantMiddleware, async (c) 
         tenant_id, sent_by_user_id, invitation_type, recipient_email,
         invite_code, email_subject, email_body_html, email_body_text,
         expires_at
-      ) VALUES (?, ?, 'family', ?, ?, 'temp', 'temp', 'temp', ?)
+      ) VALUES (?, ?, 'referral', ?, ?, 'temp', 'temp', 'temp', ?)
     `).bind(
       tenant.id,
       user.userId,
@@ -1585,20 +1585,18 @@ app.post('/api/invitations/generate-link', authMiddleware, tenantMiddleware, asy
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
 
-    // Create email invitation record for tracking
-    const emailInvitationId = Math.random().toString(36).substring(2, 15);
+    // Create email invitation record for tracking (let id auto-increment)
     await db.prepare(`
       INSERT INTO email_invitations (
-        id, tenant_id, sender_user_id, recipient_email, invitation_type,
+        tenant_id, sent_by_user_id, recipient_email, invitation_type,
         invite_code, email_subject, email_body_html, email_body_text,
-        expires_at, sent_at, status, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'link_generated', ?)
+        expires_at, status, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', ?)
     `).bind(
-      emailInvitationId,
       tenant.id,
       user.userId,
-      recipientEmail,
-      'family',
+      'whatsapp-shareable-link',
+      'new_account',
       inviteCode,
       `Invitation to join ${invitationData.senderName}'s PowerMeter family account`,
       `Generated shareable link: ${inviteUrl}`,
