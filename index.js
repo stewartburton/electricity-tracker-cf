@@ -1971,7 +1971,159 @@ app.get('/api/invitations/details', async (c) => {
   }
 });
 
-// Remove family member from tenant
+// Get family members
+app.get('/api/family/members', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Admin-only endpoint
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const members = await db.prepare(`
+      SELECT
+        tu.user_id,
+        tu.role,
+        tu.joined_at,
+        u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.tenant_id = ?
+      ORDER BY tu.joined_at ASC
+    `).bind(tenant.id).all();
+
+    return c.json(members.results || []);
+  } catch (error) {
+    console.error('Error fetching family members:', error);
+    return c.json({ error: 'Failed to fetch family members' }, 500);
+  }
+});
+
+// Fix family invite endpoint to match admin page expectations
+app.post('/api/family/invite', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { email, message } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Admin role validation
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to send family invitations' }, 403);
+    }
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return c.json({ error: 'Valid email address is required' }, 400);
+    }
+
+    // Generate unique invitation link (reuse existing invitation system)
+    const invitationData = {
+      type: 'family',
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      inviterEmail: user.email,
+      inviterName: user.email.split('@')[0],
+      message: message || null,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    const token = btoa(JSON.stringify(invitationData));
+    const baseUrl = getBaseUrl(c.env);
+    const invitationUrl = `${baseUrl}/invite?token=${encodeURIComponent(token)}`;
+
+    // Send email using existing email service
+    const emailService = new CloudflareEmailService(c.env);
+
+    const emailResult = await emailService.sendFamilyInvitation({
+      recipientEmail: email,
+      inviterName: user.email.split('@')[0],
+      familyName: tenant.name,
+      invitationUrl,
+      message: message || '',
+      baseUrl
+    });
+
+    if (emailResult.success) {
+      return c.json({
+        success: true,
+        message: 'Family invitation sent successfully',
+        invitationUrl
+      });
+    } else {
+      throw new Error(emailResult.error || 'Failed to send invitation email');
+    }
+
+  } catch (error) {
+    console.error('Error sending family invitation:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to send family invitation'
+    }, 500);
+  }
+});
+
+// Fix remove member endpoint to match admin page expectations
+app.delete('/api/family/remove/:userId', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Validate admin role
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to remove family members' }, 403);
+    }
+
+    if (!userId) {
+      return c.json({ error: 'User ID is required' }, 400);
+    }
+
+    // Prevent admin from removing themselves
+    if (userId === user.userId) {
+      return c.json({ error: 'Cannot remove yourself from the family' }, 400);
+    }
+
+    // Check if user exists in this tenant
+    const memberToRemove = await db.prepare(`
+      SELECT tu.*, u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.user_id = ? AND tu.tenant_id = ?
+    `).bind(userId, tenant.id).first();
+
+    if (!memberToRemove) {
+      return c.json({ error: 'User is not a member of this family' }, 404);
+    }
+
+    // Remove the user from the tenant
+    const result = await db.prepare(`
+      DELETE FROM tenant_users
+      WHERE user_id = ? AND tenant_id = ?
+    `).bind(userId, tenant.id).run();
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: `Successfully removed ${memberToRemove.email} from the family`
+      });
+    } else {
+      throw new Error('Failed to remove family member');
+    }
+
+  } catch (error) {
+    console.error('Error removing family member:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to remove family member'
+    }, 500);
+  }
+});
+
+// Remove family member from tenant (LEGACY - keeping for compatibility)
 app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const { userId } = await c.req.json();
@@ -2085,6 +2237,7 @@ app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
 app.get('/reading', serveStatic({ path: './public/reading.html' }));
 app.get('/history', serveStatic({ path: './public/history.html' }));
 app.get('/settings', serveStatic({ path: './public/settings.html' }));
+app.get('/admin', serveStatic({ path: './public/admin.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
 export default app;

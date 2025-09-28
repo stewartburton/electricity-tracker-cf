@@ -253,6 +253,44 @@
                 window.ElectricityTracker.auth.logout();
             });
         }
+
+        // Add admin navigation for admin users
+        window.ElectricityTracker.addAdminNavigation = async function() {
+            try {
+                const response = await window.ElectricityTracker.api.get('/api/account/profile');
+                if (response?.tenant?.role === 'admin') {
+                    const navLinks = document.getElementById('navLinks');
+                    if (navLinks) {
+                        // Check if admin link already exists
+                        const existingAdminLink = navLinks.querySelector('a[href="/admin"]');
+                        if (!existingAdminLink) {
+                            // Find the settings link and insert admin link before logout
+                            const logoutLink = navLinks.querySelector('#logout');
+                            if (logoutLink) {
+                                const adminLink = document.createElement('a');
+                                adminLink.href = '/admin';
+                                adminLink.className = 'nav-btn';
+                                adminLink.innerHTML = '👑 Admin';
+
+                                // Add active class if on admin page
+                                if (window.location.pathname === '/admin') {
+                                    adminLink.classList.add('active');
+                                }
+
+                                navLinks.insertBefore(adminLink, logoutLink);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log('Could not check admin status:', error);
+            }
+        };
+
+        // Auto-add admin navigation on authenticated pages
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+            window.ElectricityTracker.addAdminNavigation();
+        }
     });
-    
+
 })();
