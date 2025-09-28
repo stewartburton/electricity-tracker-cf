@@ -613,24 +613,116 @@ app.delete('/api/readings/:id', async (c) => {
   }
 });
 
+// Parse SMS voucher endpoint
+app.post('/api/vouchers/parse-sms', async (c) => {
+  try {
+    const { smsText } = await c.req.json();
+
+    if (!smsText) {
+      return c.json({
+        success: false,
+        error: 'SMS text is required'
+      }, 400);
+    }
+
+    // Parse FNB SMS format
+    // Example: "FNB :-) Cape Town. Elec Amt: R86.96. Vat Amt: R13.04. Meter: 09000490491. Credit Token: 1393-1590-8399-0790-1839. Units: 29.7kWh."
+
+    const patterns = {
+      // Match electricity amount: "Elec Amt: R86.96"
+      amount: /Elec Amt:\s*R?([\d.]+)/i,
+
+      // Match VAT amount: "Vat Amt: R13.04"
+      vat: /Vat Amt:\s*R?([\d.]+)/i,
+
+      // Match units: "Units: 29.7kWh"
+      units: /Units:\s*([\d.]+)(?:kWh?)?/i,
+
+      // Match credit token: "Credit Token: 1393-1590-8399-0790-1839"
+      token: /Credit Token:\s*([\d-]+)/i,
+
+      // Match meter number: "Meter: 09000490491"
+      meter: /Meter:\s*(\d+)/i
+    };
+
+    const parsed = {};
+    let hasMatches = false;
+
+    // Extract amount
+    const amountMatch = smsText.match(patterns.amount);
+    if (amountMatch) {
+      parsed.amount = parseFloat(amountMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract VAT
+    const vatMatch = smsText.match(patterns.vat);
+    if (vatMatch) {
+      parsed.vat = parseFloat(vatMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract units
+    const unitsMatch = smsText.match(patterns.units);
+    if (unitsMatch) {
+      parsed.units = parseFloat(unitsMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract token
+    const tokenMatch = smsText.match(patterns.token);
+    if (tokenMatch) {
+      parsed.token = tokenMatch[1];
+      hasMatches = true;
+    }
+
+    // Extract meter (for notes)
+    const meterMatch = smsText.match(patterns.meter);
+    if (meterMatch) {
+      parsed.note = `Meter: ${meterMatch[1]}`;
+      hasMatches = true;
+    }
+
+    if (!hasMatches) {
+      return c.json({
+        success: false,
+        error: 'The string did not match the expected pattern.'
+      }, 400);
+    }
+
+    return c.json({
+      success: true,
+      message: 'SMS parsed successfully',
+      ...parsed
+    });
+
+  } catch (error) {
+    console.error('SMS parsing error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to parse SMS'
+    }, 500);
+  }
+});
+
 // Create voucher endpoint
 app.post('/api/vouchers', async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
-    const { token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes } = await c.req.json();
+    const { token, purchase_date, amount, units, vat, notes } = await c.req.json();
 
     // Validate required fields
-    if (!token_number || !purchase_date || !rand_amount || !kwh_amount) {
-      return c.json({ error: 'Token number, purchase date, rand amount, and kWh amount are required' }, 400);
+    if (!token || !purchase_date || !amount || !units) {
+      return c.json({ error: 'Token number, purchase date, amount, and units are required' }, 400);
     }
 
     // Insert new voucher with tenant isolation
     const result = await db.prepare(`
       INSERT INTO vouchers (user_id, tenant_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).bind(user.userId, tenant.id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
+    `).bind(user.userId, tenant.id, token, purchase_date, amount, units, vat || 0, notes || null).run();
 
     if (result.success) {
       return c.json({

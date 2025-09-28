@@ -161,7 +161,7 @@
                 const result = await ET.api.post('/api/vouchers', formData);
                 
                 if (result) {
-                    ET.utils.showMessage('Voucher saved successfully!');
+                    ET.utils.showMessage('Voucher saved successfully! ✅');
                     document.getElementById('voucherForm').reset();
                     document.getElementById('smsText').value = '';
                     setDefaultDateTime();

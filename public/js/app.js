@@ -179,13 +179,58 @@
         },
         
         showMessage: function(message, type = 'info') {
-            // You can implement a toast/notification system here
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${type}-message`;
+            messageDiv.innerHTML = message;
+
+            const backgroundColor = type === 'error' ? '#dc3545' : '#28a745';
+
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${backgroundColor};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                max-width: 300px;
+                animation: slideIn 0.3s ease-out;
+            `;
+
+            // Add CSS animations if not already present
+            if (!document.getElementById('message-animations')) {
+                const style = document.createElement('style');
+                style.id = 'message-animations';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    @keyframes slideOut {
+                        from { transform: translateX(0); opacity: 1; }
+                        to { transform: translateX(100%); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            document.body.appendChild(messageDiv);
+
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+
+            // Also log to console for debugging
             if (type === 'error') {
                 console.error(message);
-                alert('Error: ' + message);
             } else {
                 console.log(message);
-                // Could show a success toast here
             }
         },
         
