@@ -3,6 +3,7 @@ import { serveStatic } from 'hono/cloudflare-workers';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import CloudflareEmailService from './services/cloudflareEmailService.js';
 
 // Helper function to extract a friendly name from email address
@@ -24,6 +25,21 @@ function getFriendlyNameFromEmail(email) {
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
 
   return capitalizedParts.join(' ') || 'User';
+}
+
+const RESET_TOKEN_EXPIRY_MINUTES = 60;
+
+function generatePasswordResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function hashPasswordResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getBaseUrl(env) {
+  const base = env.BASE_URL || 'https://powermeter.app';
+  return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
 const app = new Hono();
@@ -291,6 +307,207 @@ app.post('/api/auth/register', async (c) => {
   }
 });
 
+app.post('/api/auth/forgot-password', async (c) => {
+  try {
+    const { email } = await c.req.json();
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return c.json({
+        success: true,
+        message: 'If that email address exists in our system, a password reset link has been sent.',
+        emailDispatched: false
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const db = c.env.DB;
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE expires_at < datetime('now')
+    `).run();
+
+    const user = await db.prepare(`
+      SELECT id, email
+      FROM users
+      WHERE LOWER(email) = ?
+    `).bind(normalizedEmail).first();
+
+    if (!user) {
+      return c.json({
+        success: true,
+        message: 'If that email address exists in our system, a password reset link has been sent.',
+        emailDispatched: false
+      });
+    }
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE user_id = ?
+    `).bind(user.id).run();
+
+    const token = generatePasswordResetToken();
+    const tokenHash = hashPasswordResetToken(token);
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const requestIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null;
+    const userAgent = c.req.header('User-Agent') || null;
+
+    await db.prepare(`
+      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, requested_ip, requested_user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(user.id, tokenHash, expiresAt, requestIp, userAgent).run();
+
+    const emailService = new CloudflareEmailService(c.env);
+    const baseUrl = getBaseUrl(c.env);
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+    let emailDispatched = false;
+
+    try {
+      const emailResult = await emailService.sendPasswordResetEmail({
+        recipientEmail: user.email,
+        friendlyName: getFriendlyNameFromEmail(user.email),
+        resetUrl,
+        expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
+        baseUrl,
+        productName: 'PowerMeter'
+      });
+
+      if (!emailResult.success) {
+        console.error('Password reset email send failed:', emailResult.error);
+      } else {
+        emailDispatched = true;
+      }
+    } catch (emailError) {
+      console.error('Password reset email error:', emailError);
+    }
+
+    const responsePayload = {
+      success: true,
+      message: 'If that email address exists in our system, a password reset link has been sent.',
+      emailDispatched
+    };
+
+    if (c.env.ENABLE_RESET_TOKEN_DEBUG === 'true') {
+      responsePayload.debugToken = token;
+    }
+
+    return c.json(responsePayload);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.get('/api/auth/reset-password/validate', async (c) => {
+  try {
+    const token = c.req.query('token');
+
+    if (!token) {
+      return c.json({ error: 'Token is required' }, 400);
+    }
+
+    const tokenHash = hashPasswordResetToken(token);
+    const db = c.env.DB;
+
+    const tokenRecord = await db.prepare(`
+      SELECT prt.*, u.email
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token_hash = ?
+      ORDER BY prt.created_at DESC
+      LIMIT 1
+    `).bind(tokenHash).first();
+
+    if (!tokenRecord) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    if (tokenRecord.used_at) {
+      return c.json({ error: 'This reset link has already been used' }, 400);
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    return c.json({
+      success: true,
+      valid: true,
+      email: tokenRecord.email
+    });
+  } catch (error) {
+    console.error('Validate reset token error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.post('/api/auth/reset-password', async (c) => {
+  try {
+    const { token, password } = await c.req.json();
+
+    if (typeof token !== 'string' || !token.trim() || typeof password !== 'string') {
+      return c.json({ error: 'Token and new password are required' }, 400);
+    }
+
+    if (password.length < 6) {
+      return c.json({ error: 'Password must be at least 6 characters' }, 400);
+    }
+
+    const tokenHash = hashPasswordResetToken(token.trim());
+    const db = c.env.DB;
+
+    const tokenRecord = await db.prepare(`
+      SELECT prt.*, u.email
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token_hash = ?
+      ORDER BY prt.created_at DESC
+      LIMIT 1
+    `).bind(tokenHash).first();
+
+    if (!tokenRecord) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    if (tokenRecord.used_at) {
+      return c.json({ error: 'This reset link has already been used' }, 400);
+    }
+
+    const expiresAt = new Date(tokenRecord.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired token' }, 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await db.prepare(`
+      UPDATE users
+      SET password = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(hashedPassword, tokenRecord.user_id).run();
+
+    await db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = datetime('now')
+      WHERE id = ?
+    `).bind(tokenRecord.id).run();
+
+    await db.prepare(`
+      DELETE FROM password_reset_tokens
+      WHERE user_id = ? AND id != ?
+    `).bind(tokenRecord.user_id, tokenRecord.id).run();
+
+    return c.json({
+      success: true,
+      message: 'Password reset successful'
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
 // Helper function to get shared user IDs for account linking
 async function getSharedUserIds(db, userId) {
   const result = await db.prepare(`
@@ -397,24 +614,116 @@ app.delete('/api/readings/:id', async (c) => {
   }
 });
 
+// Parse SMS voucher endpoint
+app.post('/api/vouchers/parse-sms', async (c) => {
+  try {
+    const { smsText } = await c.req.json();
+
+    if (!smsText) {
+      return c.json({
+        success: false,
+        error: 'SMS text is required'
+      }, 400);
+    }
+
+    // Parse FNB SMS format
+    // Example: "FNB :-) Cape Town. Elec Amt: R86.96. Vat Amt: R13.04. Meter: 09000490491. Credit Token: 1393-1590-8399-0790-1839. Units: 29.7kWh."
+
+    const patterns = {
+      // Match electricity amount: "Elec Amt: R86.96"
+      amount: /Elec Amt:\s*R?([\d.]+)/i,
+
+      // Match VAT amount: "Vat Amt: R13.04"
+      vat: /Vat Amt:\s*R?([\d.]+)/i,
+
+      // Match units: "Units: 29.7kWh"
+      units: /Units:\s*([\d.]+)(?:kWh?)?/i,
+
+      // Match credit token: "Credit Token: 1393-1590-8399-0790-1839"
+      token: /Credit Token:\s*([\d-]+)/i,
+
+      // Match meter number: "Meter: 09000490491"
+      meter: /Meter:\s*(\d+)/i
+    };
+
+    const parsed = {};
+    let hasMatches = false;
+
+    // Extract amount
+    const amountMatch = smsText.match(patterns.amount);
+    if (amountMatch) {
+      parsed.amount = parseFloat(amountMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract VAT
+    const vatMatch = smsText.match(patterns.vat);
+    if (vatMatch) {
+      parsed.vat = parseFloat(vatMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract units
+    const unitsMatch = smsText.match(patterns.units);
+    if (unitsMatch) {
+      parsed.units = parseFloat(unitsMatch[1]);
+      hasMatches = true;
+    }
+
+    // Extract token
+    const tokenMatch = smsText.match(patterns.token);
+    if (tokenMatch) {
+      parsed.token = tokenMatch[1];
+      hasMatches = true;
+    }
+
+    // Extract meter (for notes)
+    const meterMatch = smsText.match(patterns.meter);
+    if (meterMatch) {
+      parsed.note = `Meter: ${meterMatch[1]}`;
+      hasMatches = true;
+    }
+
+    if (!hasMatches) {
+      return c.json({
+        success: false,
+        error: 'The string did not match the expected pattern.'
+      }, 400);
+    }
+
+    return c.json({
+      success: true,
+      message: 'SMS parsed successfully',
+      ...parsed
+    });
+
+  } catch (error) {
+    console.error('SMS parsing error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to parse SMS'
+    }, 500);
+  }
+});
+
 // Create voucher endpoint
 app.post('/api/vouchers', async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
-    const { token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes } = await c.req.json();
+    const { token, purchase_date, amount, units, vat, notes } = await c.req.json();
 
     // Validate required fields
-    if (!token_number || !purchase_date || !rand_amount || !kwh_amount) {
-      return c.json({ error: 'Token number, purchase date, rand amount, and kWh amount are required' }, 400);
+    if (!token || !purchase_date || !amount || !units) {
+      return c.json({ error: 'Token number, purchase date, amount, and units are required' }, 400);
     }
 
     // Insert new voucher with tenant isolation
     const result = await db.prepare(`
       INSERT INTO vouchers (user_id, tenant_id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount, notes, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).bind(user.userId, tenant.id, token_number, purchase_date, rand_amount, kwh_amount, vat_amount || 0, notes || null).run();
+    `).bind(user.userId, tenant.id, token, purchase_date, amount, units, vat || 0, notes || null).run();
 
     if (result.success) {
       return c.json({
@@ -1662,7 +1971,159 @@ app.get('/api/invitations/details', async (c) => {
   }
 });
 
-// Remove family member from tenant
+// Get family members
+app.get('/api/family/members', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Admin-only endpoint
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const members = await db.prepare(`
+      SELECT
+        tu.user_id,
+        tu.role,
+        tu.joined_at,
+        u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.tenant_id = ?
+      ORDER BY tu.joined_at ASC
+    `).bind(tenant.id).all();
+
+    return c.json(members.results || []);
+  } catch (error) {
+    console.error('Error fetching family members:', error);
+    return c.json({ error: 'Failed to fetch family members' }, 500);
+  }
+});
+
+// Fix family invite endpoint to match admin page expectations
+app.post('/api/family/invite', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const { email, message } = await c.req.json();
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Admin role validation
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to send family invitations' }, 403);
+    }
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return c.json({ error: 'Valid email address is required' }, 400);
+    }
+
+    // Generate unique invitation link (reuse existing invitation system)
+    const invitationData = {
+      type: 'family',
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      inviterEmail: user.email,
+      inviterName: user.email.split('@')[0],
+      message: message || null,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    const token = btoa(JSON.stringify(invitationData));
+    const baseUrl = getBaseUrl(c.env);
+    const invitationUrl = `${baseUrl}/invite?token=${encodeURIComponent(token)}`;
+
+    // Send email using existing email service
+    const emailService = new CloudflareEmailService(c.env);
+
+    const emailResult = await emailService.sendFamilyInvitation({
+      recipientEmail: email,
+      inviterName: user.email.split('@')[0],
+      familyName: tenant.name,
+      invitationUrl,
+      message: message || '',
+      baseUrl
+    });
+
+    if (emailResult.success) {
+      return c.json({
+        success: true,
+        message: 'Family invitation sent successfully',
+        invitationUrl
+      });
+    } else {
+      throw new Error(emailResult.error || 'Failed to send invitation email');
+    }
+
+  } catch (error) {
+    console.error('Error sending family invitation:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to send family invitation'
+    }, 500);
+  }
+});
+
+// Fix remove member endpoint to match admin page expectations
+app.delete('/api/family/remove/:userId', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Validate admin role
+    if (tenant.role !== 'admin') {
+      return c.json({ error: 'Admin role required to remove family members' }, 403);
+    }
+
+    if (!userId) {
+      return c.json({ error: 'User ID is required' }, 400);
+    }
+
+    // Prevent admin from removing themselves
+    if (userId === user.userId) {
+      return c.json({ error: 'Cannot remove yourself from the family' }, 400);
+    }
+
+    // Check if user exists in this tenant
+    const memberToRemove = await db.prepare(`
+      SELECT tu.*, u.email
+      FROM tenant_users tu
+      JOIN users u ON tu.user_id = u.id
+      WHERE tu.user_id = ? AND tu.tenant_id = ?
+    `).bind(userId, tenant.id).first();
+
+    if (!memberToRemove) {
+      return c.json({ error: 'User is not a member of this family' }, 404);
+    }
+
+    // Remove the user from the tenant
+    const result = await db.prepare(`
+      DELETE FROM tenant_users
+      WHERE user_id = ? AND tenant_id = ?
+    `).bind(userId, tenant.id).run();
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: `Successfully removed ${memberToRemove.email} from the family`
+      });
+    } else {
+      throw new Error('Failed to remove family member');
+    }
+
+  } catch (error) {
+    console.error('Error removing family member:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to remove family member'
+    }, 500);
+  }
+});
+
+// Remove family member from tenant (LEGACY - keeping for compatibility)
 app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const { userId } = await c.req.json();
@@ -1768,12 +2229,15 @@ app.get('/favicon.ico', serveStatic({ root: './public' }));
 // Serve HTML pages
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.get('/login', serveStatic({ path: './public/login.html' }));
+app.get('/forgot-password', serveStatic({ path: './public/forgot-password.html' }));
+app.get('/reset-password', serveStatic({ path: './public/reset-password.html' }));
 app.get('/register', serveStatic({ path: './public/register.html' }));
 app.get('/dashboard', serveStatic({ path: './public/dashboard.html' }));
 app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
 app.get('/reading', serveStatic({ path: './public/reading.html' }));
 app.get('/history', serveStatic({ path: './public/history.html' }));
 app.get('/settings', serveStatic({ path: './public/settings.html' }));
+app.get('/admin', serveStatic({ path: './public/admin.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
 export default app;

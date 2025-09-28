@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - PowerMeter</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
+            <a href="/admin" class="nav-btn active">👑 Admin</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        <div class="page-header">
+            <h1 class="admin-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor"/>
+                </svg>
+                Admin Panel
+            </h1>
+            <p class="page-subtitle">Manage family members and system settings</p>
+        </div>
+
+        <div class="admin-dashboard">
+            <!-- Family Management Section -->
+            <div class="admin-section">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <h2>👥 Family Management</h2>
+                        <p>Manage family members and invitations</p>
+                    </div>
+
+                    <div class="admin-actions">
+                        <button id="generateInviteBtn" class="primary-btn">
+                            📧 Generate Invite Code
+                        </button>
+
+                        <button id="sendEmailInviteBtn" class="secondary-btn">
+                            ✉️ Send Email Invitation
+                        </button>
+
+                        <button id="viewFamilyBtn" class="secondary-btn">
+                            👥 View Family Members
+                        </button>
+                    </div>
+
+                    <div id="inviteResult" class="result-section" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- Email Invitation Section -->
+            <div class="admin-section" id="emailInviteSection" style="display: none;">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <h3>Send Email Invitation</h3>
+                    </div>
+
+                    <form id="emailInviteForm" class="admin-form">
+                        <div class="form-group">
+                            <label for="inviteEmail">Email Address</label>
+                            <input type="email" id="inviteEmail" required placeholder="friend@example.com">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="inviteMessage">Personal Message (Optional)</label>
+                            <textarea id="inviteMessage" rows="3" placeholder="Come join our family's electricity tracking..."></textarea>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="primary-btn">Send Invitation</button>
+                            <button type="button" id="cancelEmailInvite" class="secondary-btn">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Family Members Section -->
+            <div class="admin-section" id="familyMembersSection" style="display: none;">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <h3>Family Members</h3>
+                        <button id="refreshMembersBtn" class="secondary-btn">🔄 Refresh</button>
+                    </div>
+
+                    <div id="familyMembersList" class="members-list">
+                        <!-- Family members will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Information Section -->
+            <div class="admin-section">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <h2>📊 System Information</h2>
+                    </div>
+
+                    <div class="system-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Your Role:</span>
+                            <span class="stat-value" id="userRole">Loading...</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Family Name:</span>
+                            <span class="stat-value" id="familyName">Loading...</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Member Count:</span>
+                            <span class="stat-value" id="memberCount">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+
+        // Check authentication and admin access
+        if (!ET.auth.checkAuth()) {
+            // User will be redirected to login
+        } else {
+            loadSystemInfo();
+        }
+
+        // Load system information
+        async function loadSystemInfo() {
+            try {
+                const response = await ET.api.get('/api/account/profile');
+                if (response?.tenant) {
+                    document.getElementById('userRole').textContent = response.tenant.role || 'Unknown';
+                    document.getElementById('familyName').textContent = response.tenant.name || 'Unknown';
+
+                    // Check if user is admin
+                    if (response.tenant.role !== 'admin') {
+                        document.body.innerHTML = `
+                            <div style="display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center;">
+                                <div>
+                                    <h1>🚫 Access Denied</h1>
+                                    <p>Admin access required to view this page.</p>
+                                    <a href="/dashboard" class="primary-btn">Return to Dashboard</a>
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load system info:', error);
+                ET.utils.showMessage('Failed to load admin information', 'error');
+            }
+        }
+
+        // Generate invite code
+        document.getElementById('generateInviteBtn').addEventListener('click', async () => {
+            try {
+                const result = await ET.api.post('/api/invites/generate');
+                if (result?.code) {
+                    document.getElementById('inviteResult').innerHTML = `
+                        <div class="success-message">
+                            <h4>✅ Invite Code Generated</h4>
+                            <p><strong>Code:</strong> <code>${result.code}</code></p>
+                            <p><strong>Expires:</strong> ${new Date(result.expiresAt).toLocaleDateString()}</p>
+                            <p>Share this code with family members to join your group.</p>
+                        </div>
+                    `;
+                    document.getElementById('inviteResult').style.display = 'block';
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to generate invite code: ' + error.message, 'error');
+            }
+        });
+
+        // Show email invitation form
+        document.getElementById('sendEmailInviteBtn').addEventListener('click', () => {
+            document.getElementById('emailInviteSection').style.display = 'block';
+            document.getElementById('inviteEmail').focus();
+        });
+
+        // Cancel email invite
+        document.getElementById('cancelEmailInvite').addEventListener('click', () => {
+            document.getElementById('emailInviteSection').style.display = 'none';
+            document.getElementById('emailInviteForm').reset();
+        });
+
+        // Send email invitation
+        document.getElementById('emailInviteForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('inviteEmail').value;
+            const message = document.getElementById('inviteMessage').value;
+
+            try {
+                const result = await ET.api.post('/api/family/invite', {
+                    email,
+                    message: message || undefined
+                });
+
+                if (result?.success) {
+                    ET.utils.showMessage('Invitation sent successfully! ✅');
+                    document.getElementById('emailInviteSection').style.display = 'none';
+                    document.getElementById('emailInviteForm').reset();
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to send invitation: ' + error.message, 'error');
+            }
+        });
+
+        // View family members
+        document.getElementById('viewFamilyBtn').addEventListener('click', loadFamilyMembers);
+        document.getElementById('refreshMembersBtn').addEventListener('click', loadFamilyMembers);
+
+        async function loadFamilyMembers() {
+            try {
+                const members = await ET.api.get('/api/family/members');
+
+                const membersList = document.getElementById('familyMembersList');
+                if (members?.length) {
+                    membersList.innerHTML = members.map(member => `
+                        <div class="member-item">
+                            <div class="member-info">
+                                <strong>${member.email}</strong>
+                                <span class="member-role ${member.role}">${member.role}</span>
+                            </div>
+                            <div class="member-details">
+                                <small>Joined: ${new Date(member.joined_at).toLocaleDateString()}</small>
+                                ${member.role !== 'admin' ? `
+                                    <button class="remove-member-btn" onclick="removeMember(${member.user_id}, '${member.email}')">
+                                        🗑️ Remove
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+
+                    document.getElementById('memberCount').textContent = members.length;
+                } else {
+                    membersList.innerHTML = '<p>No family members found.</p>';
+                }
+
+                document.getElementById('familyMembersSection').style.display = 'block';
+            } catch (error) {
+                ET.utils.showMessage('Failed to load family members: ' + error.message, 'error');
+            }
+        }
+
+        // Remove family member
+        window.removeMember = async function(userId, email) {
+            if (!confirm(`Are you sure you want to remove ${email} from the family?`)) {
+                return;
+            }
+
+            try {
+                await ET.api.delete(`/api/family/remove/${userId}`);
+                ET.utils.showMessage('Family member removed successfully');
+                loadFamilyMembers(); // Refresh the list
+            } catch (error) {
+                ET.utils.showMessage('Failed to remove family member: ' + error.message, 'error');
+            }
+        };
+
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
+        });
+    </script>
+
+    <style>
+        .admin-dashboard {
+            display: grid;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .admin-section {
+            width: 100%;
+        }
+
+        .admin-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) * 4);
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-header {
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        .card-header h2 {
+            margin: 0 0 0.5rem 0;
+            color: var(--foreground);
+        }
+
+        .card-header h3 {
+            margin: 0 0 0.5rem 0;
+            color: var(--foreground);
+        }
+
+        .card-header p {
+            margin: 0;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .admin-form {
+            max-width: 500px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .result-section {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: var(--radius);
+            background: var(--accent);
+        }
+
+        .success-message {
+            color: var(--success);
+        }
+
+        .success-message code {
+            background: var(--muted);
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-family: var(--font-mono);
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+
+        .system-stats {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--accent);
+            border-radius: var(--radius);
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: var(--foreground);
+        }
+
+        .stat-value {
+            font-weight: 500;
+            color: var(--muted-foreground);
+        }
+
+        .members-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .member-item {
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--background);
+        }
+
+        .member-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .member-role {
+            padding: 0.25rem 0.75rem;
+            border-radius: calc(var(--radius) * 2);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .member-role.admin {
+            background: rgba(194, 125, 24, 0.1);
+            color: var(--primary);
+        }
+
+        .member-role.member {
+            background: var(--muted);
+            color: var(--muted-foreground);
+        }
+
+        .member-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+        }
+
+        .remove-member-btn {
+            padding: 0.25rem 0.75rem;
+            background: var(--destructive);
+            color: var(--destructive-foreground);
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .remove-member-btn:hover {
+            opacity: 0.8;
+        }
+
+        @media (max-width: 768px) {
+            .admin-actions {
+                flex-direction: column;
+            }
+
+            .form-actions {
+                flex-direction: column;
+            }
+
+            .member-info {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .member-details {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</body>
+</html>

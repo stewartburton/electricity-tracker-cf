@@ -7,9 +7,10 @@ const { request } = require('@playwright/test');
 
 class ApiHelpers {
   constructor() {
-    this.baseURL = 'https://electricity-tracker.electricity-monitor.workers.dev';
+    this.baseURL = process.env.TEST_BASE_URL || 'https://electricity-tracker.electricity-monitor.workers.dev';
     this.testUsers = new Set();
     this.testGroups = new Set();
+    this.userPasswords = new Map();
   }
 
   /**
@@ -47,6 +48,7 @@ class ApiHelpers {
       if (response.ok()) {
         // Track user for cleanup
         this.testUsers.add(email);
+        this.userPasswords.set(email, password);
         return responseBody;
       } else {
         throw new Error(`Registration failed: ${responseBody.error || 'Unknown error'}`);
@@ -61,7 +63,7 @@ class ApiHelpers {
    */
   async loginTestUser(email, password) {
     const context = await this.createRequestContext();
-    
+
     try {
       const response = await context.post('/api/auth/login', {
         data: {
@@ -73,6 +75,7 @@ class ApiHelpers {
       const responseBody = await response.json();
       
       if (response.ok()) {
+        this.userPasswords.set(email, password);
         return responseBody;
       } else {
         throw new Error(`Login failed: ${responseBody.error || 'Unknown error'}`);
@@ -312,12 +315,13 @@ class ApiHelpers {
    */
   async cleanupTestData() {
     console.log(`Cleaning up test data for ${this.testUsers.size} users and ${this.testGroups.size} groups`);
-    
+
     // For each test user, try to clean up their data
     for (const email of this.testUsers) {
       try {
         // Login to get token
-        const loginResponse = await this.loginTestUser(email, 'TestPassword123!');
+        const password = this.userPasswords.get(email) || 'TestPassword123!';
+        const loginResponse = await this.loginTestUser(email, password);
         if (loginResponse.token) {
           // Leave any groups they might be in
           try {
@@ -329,18 +333,23 @@ class ApiHelpers {
       } catch (error) {
         console.log(`Could not clean up user ${email}:`, error.message);
       }
+      this.userPasswords.delete(email);
     }
 
     // Clear tracking sets
     this.testUsers.clear();
     this.testGroups.clear();
+    this.userPasswords.clear();
   }
 
   /**
    * Add a test user to tracking (for manual registrations)
    */
-  trackTestUser(email) {
+  trackTestUser(email, password = null) {
     this.testUsers.add(email);
+    if (password) {
+      this.userPasswords.set(email, password);
+    }
   }
 
   /**
@@ -379,6 +388,48 @@ class ApiHelpers {
       } else {
         throw new Error(`Health check failed: ${response.status()}`);
       }
+    } finally {
+      await context.dispose();
+    }
+  }
+
+  async requestPasswordReset(email) {
+    const context = await this.createRequestContext();
+
+    try {
+      const response = await context.post('/api/auth/forgot-password', {
+        data: { email }
+      });
+
+      const responseBody = await response.json();
+      return { response, body: responseBody };
+    } finally {
+      await context.dispose();
+    }
+  }
+
+  async validatePasswordResetToken(token) {
+    const context = await this.createRequestContext();
+
+    try {
+      const response = await context.get(`/api/auth/reset-password/validate?token=${encodeURIComponent(token)}`);
+      const responseBody = await response.json();
+      return { response, body: responseBody };
+    } finally {
+      await context.dispose();
+    }
+  }
+
+  async resetPassword(token, password) {
+    const context = await this.createRequestContext();
+
+    try {
+      const response = await context.post('/api/auth/reset-password', {
+        data: { token, password }
+      });
+
+      const responseBody = await response.json();
+      return { response, body: responseBody, success: response.ok() };
     } finally {
       await context.dispose();
     }
