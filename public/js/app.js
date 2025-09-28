@@ -69,18 +69,18 @@
                     `${window.ElectricityTracker.API_URL}${endpoint}`,
                     config
                 );
-                
+
                 if (response.status === 401) {
                     window.ElectricityTracker.auth.logout();
                     return null;
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Request failed');
                 }
-                
+
                 return data;
             } catch (error) {
                 console.error('API Error:', error);
@@ -256,6 +256,11 @@
 
         // Add admin navigation for admin users
         window.ElectricityTracker.addAdminNavigation = async function() {
+            // Only check admin status if user is authenticated
+            if (!window.ElectricityTracker.auth.isAuthenticated()) {
+                return;
+            }
+
             try {
                 const response = await window.ElectricityTracker.api.get('/api/account/profile');
                 if (response?.tenant?.role === 'admin') {
@@ -288,7 +293,8 @@
         };
 
         // Auto-add admin navigation on authenticated pages
-        if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+        const publicPages = ['/login', '/register', '/forgot-password', '/reset-password'];
+        if (!publicPages.includes(window.location.pathname)) {
             window.ElectricityTracker.addAdminNavigation();
         }
     });
