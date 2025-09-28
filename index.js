@@ -368,7 +368,8 @@ app.post('/api/auth/forgot-password', async (c) => {
         friendlyName: getFriendlyNameFromEmail(user.email),
         resetUrl,
         expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
-        baseUrl
+        baseUrl,
+        productName: 'PowerMeter'
       });
 
       if (!emailResult.success) {
