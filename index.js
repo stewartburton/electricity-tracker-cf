@@ -91,15 +91,30 @@ const tenantMiddleware = async (c, next) => {
     `).bind(user.userId).first();
 
     if (!tenantUser) {
-      return c.json({ error: 'No tenant access' }, 403);
-    }
+      // Check if user is a super admin with no tenant association
+      const superAdminUser = await db.prepare(`
+        SELECT role FROM users WHERE id = ? AND role = 'super_admin'
+      `).bind(user.userId).first();
 
-    c.set('tenant', {
-      id: tenantUser.id,
-      name: tenantUser.name,
-      role: tenantUser.role,
-      subscription_status: tenantUser.subscription_status
-    });
+      if (superAdminUser) {
+        // Super admin can access without tenant
+        c.set('tenant', {
+          id: null,
+          name: 'System Admin',
+          role: 'super_admin',
+          subscription_status: 'active'
+        });
+      } else {
+        return c.json({ error: 'No tenant access' }, 403);
+      }
+    } else {
+      c.set('tenant', {
+        id: tenantUser.id,
+        name: tenantUser.name,
+        role: tenantUser.role,
+        subscription_status: tenantUser.subscription_status
+      });
+    }
 
     await next();
   } catch (error) {
@@ -137,17 +152,25 @@ app.post('/api/auth/login', async (c) => {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
+    // Get user's tenant and role information
+    const tenantUser = await db.prepare(`
+      SELECT t.*, tu.role
+      FROM tenants t
+      JOIN tenant_users tu ON t.id = tu.tenant_id
+      WHERE tu.user_id = ?
+    `).bind(user.id).first();
+
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: user.id, 
+      {
+        userId: user.id,
         email: user.email
       },
       c.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Return user data and token
+    // Return user data and token with role information
     return c.json({
       success: true,
       token,
@@ -155,7 +178,13 @@ app.post('/api/auth/login', async (c) => {
         id: user.id,
         email: user.email,
         created_at: user.created_at
-      }
+      },
+      tenant: tenantUser ? {
+        id: tenantUser.id,
+        name: tenantUser.name,
+        role: tenantUser.role
+      } : null,
+      redirectTo: tenantUser?.role === 'super_admin' ? '/admin.html' : '/dashboard.html'
     });
 
   } catch (error) {
@@ -516,13 +545,100 @@ async function getSharedUserIds(db, userId) {
     JOIN user_groups ug2 ON ug1.group_id = ug2.group_id
     WHERE ug1.user_id = ?
   `).bind(userId).all();
-  
+
   if (result.results && result.results.length > 0) {
     return result.results.map(row => row.user_id);
   }
-  
+
   return [userId]; // If no linked accounts, return just the current user
 }
+
+// Super Admin Setup - Create dedicated admin account
+app.post('/api/setup/create-super-admin', async (c) => {
+  try {
+    const { username, email, password, setupKey } = await c.req.json();
+    const db = c.env.DB;
+
+    // Validate setup key (you should set this in environment variables)
+    const expectedSetupKey = c.env.SUPER_ADMIN_SETUP_KEY || 'your-super-secret-setup-key-2025';
+    if (setupKey && setupKey !== expectedSetupKey) {
+      return c.json({ error: 'Invalid setup key' }, 403);
+    }
+
+    if ((!username && !email) || !password) {
+      return c.json({ error: 'Username/email and password are required' }, 400);
+    }
+
+    if (password.length < 8) {
+      return c.json({ error: 'Password must be at least 8 characters long' }, 400);
+    }
+
+    const accountEmail = email || username;
+
+    // Check if super admin already exists
+    const existingAdmin = await db.prepare(`
+      SELECT id FROM users WHERE email = ?
+    `).bind(accountEmail).first();
+
+    if (existingAdmin) {
+      return c.json({ error: 'Super admin already exists' }, 409);
+    }
+
+    // Create super admin user
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const userResult = await db.prepare(`
+      INSERT INTO users (email, password, created_at, updated_at)
+      VALUES (?, ?, datetime('now'), datetime('now'))
+    `).bind(accountEmail, hashedPassword).run();
+
+    if (!userResult.success) {
+      return c.json({ error: 'Failed to create super admin user' }, 500);
+    }
+
+    const userId = userResult.meta.last_row_id;
+
+    // Create dedicated admin tenant
+    const tenantResult = await db.prepare(`
+      INSERT INTO tenants (name, created_at, updated_at)
+      VALUES ('System Administration', datetime('now'), datetime('now'))
+    `).bind().run();
+
+    if (!tenantResult.success) {
+      return c.json({ error: 'Failed to create admin tenant' }, 500);
+    }
+
+    const tenantId = tenantResult.meta.last_row_id;
+
+    // Add user to admin tenant with super_admin role
+    await db.prepare(`
+      INSERT INTO tenant_users (tenant_id, user_id, role, joined_at)
+      VALUES (?, ?, 'super_admin', datetime('now'))
+    `).bind(tenantId, userId).run();
+
+    return c.json({
+      success: true,
+      message: 'Super admin account created successfully',
+      user: {
+        id: userId,
+        email: accountEmail,
+        role: 'super_admin',
+        tenantId: tenantId
+      }
+    });
+
+  } catch (error) {
+    console.error('Super admin creation error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    return c.json({
+      error: 'Failed to create super admin account',
+      details: error.message
+    }, 500);
+  }
+});
 
 // Protected routes
 app.use('/api/readings/*', authMiddleware, tenantMiddleware);
@@ -787,70 +903,168 @@ app.delete('/api/vouchers/:id', async (c) => {
   }
 });
 
-// Dashboard endpoint (tenant-based)
+// Dashboard endpoint (tenant-based or super admin aggregate)
 app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
-    // Get voucher totals for the tenant (family)
-    const voucherResult = await db.prepare(`
-      SELECT
-        COALESCE(SUM(rand_amount), 0) as total_amount,
-        COALESCE(SUM(kwh_amount), 0) as total_units,
-        COALESCE(SUM(vat_amount), 0) as total_vat,
-        COUNT(*) as total_vouchers
-      FROM vouchers
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    const isSuperAdmin = tenant?.role === 'super_admin';
 
-    // Calculate average cost per kWh
-    const avgCostPerKwh = voucherResult.total_units > 0 ? 
-      voucherResult.total_amount / voucherResult.total_units : 0;
+    if (isSuperAdmin) {
+      // Super admin sees aggregate data across ALL users/tenants
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_amount,
+          COALESCE(SUM(kwh_amount), 0) as total_units,
+          COALESCE(SUM(vat_amount), 0) as total_vat,
+          COUNT(*) as total_vouchers
+        FROM readings
+        WHERE type = 'voucher'
+      `).first();
 
-    // Get recent vouchers for the tenant (family)
-    const recentVouchers = await db.prepare(`
-      SELECT * FROM vouchers
-      WHERE tenant_id = ?
-      ORDER BY purchase_date DESC
-      LIMIT 5
-    `).bind(tenant.id).all();
+      // Calculate average cost per kWh
+      const avgCostPerKwh = voucherResult.total_units > 0 ?
+        voucherResult.total_amount / voucherResult.total_units : 0;
 
-    // Get recent readings for the tenant (family)
-    const recentReadings = await db.prepare(`
-      SELECT * FROM readings
-      WHERE tenant_id = ?
-      ORDER BY reading_date DESC
-      LIMIT 5
-    `).bind(tenant.id).all();
+      // Get recent vouchers across all tenants
+      const recentVouchers = await db.prepare(`
+        SELECT r.*, t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'voucher'
+        ORDER BY r.purchase_date DESC
+        LIMIT 5
+      `).all();
 
-    // Get monthly data for the last 6 months for the tenant (family)
-    const monthlyData = await db.prepare(`
-      SELECT
-        strftime('%Y-%m', purchase_date) as month,
-        SUM(rand_amount) as amount,
-        SUM(kwh_amount) as kwh
-      FROM vouchers
-      WHERE tenant_id = ?
-        AND purchase_date >= date('now', '-6 months')
-      GROUP BY strftime('%Y-%m', purchase_date)
-      ORDER BY month DESC
-    `).bind(tenant.id).all();
+      // Get recent readings across all tenants
+      const recentReadings = await db.prepare(`
+        SELECT r.*, t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'reading'
+        ORDER BY r.reading_date DESC
+        LIMIT 5
+      `).all();
 
-    return c.json({
-      success: true,
-      totalVouchers: voucherResult.total_vouchers || 0,
-      totalAmount: voucherResult.total_amount || 0,
-      totalUnits: voucherResult.total_units || 0,
-      totalVat: voucherResult.total_vat || 0,
-      avgCostPerKwh: avgCostPerKwh || 0,
-      recentVouchers: recentVouchers.results || [],
-      recentReadings: recentReadings.results || [],
-      monthlyData: monthlyData.results || [],
-      tenantName: tenant.name,
-      userRole: tenant.role
-    });
+      // Get monthly data for the last 6 months across all tenants
+      const monthlyData = await db.prepare(`
+        SELECT
+          strftime('%Y-%m', purchase_date) as month,
+          SUM(rand_amount) as amount,
+          SUM(kwh_amount) as kwh
+        FROM readings
+        WHERE type = 'voucher'
+          AND purchase_date >= date('now', '-6 months')
+        GROUP BY strftime('%Y-%m', purchase_date)
+        ORDER BY month DESC
+      `).all();
+
+      // Get total users and families for super admin overview
+      const platformStats = await db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM users) as total_users,
+          (SELECT COUNT(*) FROM tenants) as total_families,
+          (SELECT COUNT(*) FROM readings WHERE type = 'reading') as total_readings
+      `).first();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: true,
+        totalVouchers: voucherResult.total_vouchers || 0,
+        totalAmount: voucherResult.total_amount || 0,
+        totalUnits: voucherResult.total_units || 0,
+        totalVat: voucherResult.total_vat || 0,
+        avgCostPerKwh: avgCostPerKwh || 0,
+        totalUsers: platformStats.total_users || 0,
+        totalFamilies: platformStats.total_families || 0,
+        totalReadings: platformStats.total_readings || 0,
+        recentVouchers: recentVouchers?.results || [],
+        recentReadings: recentReadings?.results || [],
+        monthlyData: monthlyData?.results || [],
+        tenantName: 'Platform Overview',
+        userRole: tenant.role
+      });
+    } else {
+      // Regular tenant-scoped dashboard with updated schema
+      // Handle case where super admin has no tenant
+      if (!tenant.id) {
+        return c.json({
+          success: true,
+          isSuperAdmin: false,
+          totalVouchers: 0,
+          totalAmount: 0,
+          totalUnits: 0,
+          totalVat: 0,
+          avgCostPerKwh: 0,
+          recentVouchers: [],
+          recentReadings: [],
+          monthlyData: [],
+          tenantName: 'No Family',
+          userRole: tenant.role,
+          message: 'No family data available'
+        });
+      }
+
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_amount,
+          COALESCE(SUM(kwh_amount), 0) as total_units,
+          COALESCE(SUM(vat_amount), 0) as total_vat,
+          COUNT(*) as total_vouchers
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+      `).bind(tenant.id).first();
+
+      // Calculate average cost per kWh
+      const avgCostPerKwh = voucherResult.total_units > 0 ?
+        voucherResult.total_amount / voucherResult.total_units : 0;
+
+      // Get recent vouchers for the tenant (family)
+      const recentVouchers = await db.prepare(`
+        SELECT * FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+        ORDER BY purchase_date DESC
+        LIMIT 5
+      `).bind(tenant.id).all();
+
+      // Get recent readings for the tenant (family)
+      const recentReadings = await db.prepare(`
+        SELECT * FROM readings
+        WHERE tenant_id = ? AND type = 'reading'
+        ORDER BY reading_date DESC
+        LIMIT 5
+      `).bind(tenant.id).all();
+
+      // Get monthly data for the last 6 months for the tenant (family)
+      const monthlyData = await db.prepare(`
+        SELECT
+          strftime('%Y-%m', purchase_date) as month,
+          SUM(rand_amount) as amount,
+          SUM(kwh_amount) as kwh
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+          AND purchase_date >= date('now', '-6 months')
+        GROUP BY strftime('%Y-%m', purchase_date)
+        ORDER BY month DESC
+      `).bind(tenant.id).all();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: false,
+        totalVouchers: voucherResult.total_vouchers || 0,
+        totalAmount: voucherResult.total_amount || 0,
+        totalUnits: voucherResult.total_units || 0,
+        totalVat: voucherResult.total_vat || 0,
+        avgCostPerKwh: avgCostPerKwh || 0,
+        recentVouchers: recentVouchers?.results || [],
+        recentReadings: recentReadings?.results || [],
+        monthlyData: monthlyData?.results || [],
+        tenantName: tenant.name,
+        userRole: tenant.role
+      });
+    }
 
   } catch (error) {
     console.error('Dashboard error:', error);
@@ -858,78 +1072,189 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   }
 });
 
-// Dashboard stats (tenant-based)
+// Dashboard stats (tenant-based or super admin aggregate)
 app.get('/api/dashboard/stats', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
-    // Get voucher totals (money spent) for the tenant (family)
-    const voucherResult = await db.prepare(`
-      SELECT
-        COALESCE(SUM(rand_amount), 0) as total_purchased,
-        COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
-        COUNT(*) as voucher_count
-      FROM vouchers
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    const isSuperAdmin = tenant?.role === 'super_admin';
 
-    // Get reading data for the tenant (family)
-    const readingResult = await db.prepare(`
-      SELECT
-        COUNT(*) as reading_count,
-        MIN(reading_value) as lowest_reading,
-        MAX(reading_value) as highest_reading,
-        AVG(reading_value) as avg_reading
-      FROM readings
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    if (isSuperAdmin) {
+      // Super admin sees aggregate stats across ALL users/tenants
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_purchased,
+          COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
+          COUNT(*) as voucher_count
+        FROM readings
+        WHERE type = 'voucher'
+      `).first();
 
-    // Get recent vouchers for the tenant (family)
-    const recentVouchers = await db.prepare(`
-      SELECT
-        'voucher' as type,
-        rand_amount as amount,
-        kwh_amount,
-        token_number,
-        purchase_date as date,
-        created_at,
-        notes
-      FROM vouchers
-      WHERE tenant_id = ?
-      ORDER BY purchase_date DESC
-      LIMIT 3
-    `).bind(tenant.id).all();
+      // Get reading data across all tenants
+      const readingResult = await db.prepare(`
+        SELECT
+          COUNT(*) as reading_count,
+          MIN(reading_value) as lowest_reading,
+          MAX(reading_value) as highest_reading,
+          AVG(reading_value) as avg_reading
+        FROM readings
+        WHERE type = 'reading'
+      `).first();
 
-    const recentReadings = await db.prepare(`
-      SELECT
-        'reading' as type,
-        reading_value as amount,
-        reading_date as date,
-        created_at,
-        notes
-      FROM readings
-      WHERE tenant_id = ?
-      ORDER BY reading_date DESC
-      LIMIT 3
-    `).bind(tenant.id).all();
+      // Get recent vouchers across all tenants
+      const recentVouchers = await db.prepare(`
+        SELECT
+          'voucher' as type,
+          r.rand_amount as amount,
+          r.kwh_amount,
+          r.token_number,
+          r.purchase_date as date,
+          r.created_at,
+          r.notes,
+          t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'voucher'
+        ORDER BY r.purchase_date DESC
+        LIMIT 3
+      `).all();
 
-    return c.json({
-      success: true,
-      data: {
-        totalPurchased: voucherResult.total_purchased || 0,
-        totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
-        voucherCount: voucherResult.voucher_count || 0,
-        readingCount: readingResult.reading_count || 0,
-        lowestReading: readingResult.lowest_reading || 0,
-        highestReading: readingResult.highest_reading || 0,
-        avgReading: readingResult.avg_reading || 0,
-        recentVouchers: recentVouchers.results || [],
-        recentReadings: recentReadings.results || [],
-        linkedAccountCount: sharedUserIds.length
+      const recentReadings = await db.prepare(`
+        SELECT
+          'reading' as type,
+          r.reading_value as amount,
+          r.reading_date as date,
+          r.created_at,
+          r.notes,
+          t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'reading'
+        ORDER BY r.reading_date DESC
+        LIMIT 3
+      `).all();
+
+      // Get platform stats for super admin
+      const platformStats = await db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM users) as total_users,
+          (SELECT COUNT(*) FROM tenants) as total_families
+      `).first();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: true,
+        data: {
+          totalPurchased: voucherResult.total_purchased || 0,
+          totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
+          voucherCount: voucherResult.voucher_count || 0,
+          readingCount: readingResult.reading_count || 0,
+          lowestReading: readingResult.lowest_reading || 0,
+          highestReading: readingResult.highest_reading || 0,
+          avgReading: readingResult.avg_reading || 0,
+          totalUsers: platformStats.total_users || 0,
+          totalFamilies: platformStats.total_families || 0,
+          recentVouchers: recentVouchers?.results || [],
+          recentReadings: recentReadings?.results || []
+        }
+      });
+    } else {
+      // Regular tenant-scoped stats with updated schema
+      // Handle case where super admin has no tenant
+      if (!tenant.id) {
+        return c.json({
+          success: true,
+          isSuperAdmin: false,
+          data: {
+            totalPurchased: 0,
+            totalKwhPurchased: 0,
+            voucherCount: 0,
+            readingCount: 0,
+            lowestReading: 0,
+            highestReading: 0,
+            avgReading: 0,
+            recentVouchers: [],
+            recentReadings: [],
+            linkedAccountCount: 0
+          }
+        });
       }
-    });
+
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_purchased,
+          COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
+          COUNT(*) as voucher_count
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+      `).bind(tenant.id).first();
+
+      // Get reading data for the tenant (family)
+      const readingResult = await db.prepare(`
+        SELECT
+          COUNT(*) as reading_count,
+          MIN(reading_value) as lowest_reading,
+          MAX(reading_value) as highest_reading,
+          AVG(reading_value) as avg_reading
+        FROM readings
+        WHERE tenant_id = ? AND type = 'reading'
+      `).bind(tenant.id).first();
+
+      // Get recent vouchers for the tenant (family)
+      const recentVouchers = await db.prepare(`
+        SELECT
+          'voucher' as type,
+          rand_amount as amount,
+          kwh_amount,
+          token_number,
+          purchase_date as date,
+          created_at,
+          notes
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+        ORDER BY purchase_date DESC
+        LIMIT 3
+      `).bind(tenant.id).all();
+
+      const recentReadings = await db.prepare(`
+        SELECT
+          'reading' as type,
+          reading_value as amount,
+          reading_date as date,
+          created_at,
+          notes
+        FROM readings
+        WHERE tenant_id = ? AND type = 'reading'
+        ORDER BY reading_date DESC
+        LIMIT 3
+      `).bind(tenant.id).all();
+
+      // Get linked account count for the tenant
+      const linkedAccounts = await db.prepare(`
+        SELECT COUNT(*) as count
+        FROM tenant_users
+        WHERE tenant_id = ?
+      `).bind(tenant.id).first();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: false,
+        data: {
+          totalPurchased: voucherResult.total_purchased || 0,
+          totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
+          voucherCount: voucherResult.voucher_count || 0,
+          readingCount: readingResult.reading_count || 0,
+          lowestReading: readingResult.lowest_reading || 0,
+          highestReading: readingResult.highest_reading || 0,
+          avgReading: readingResult.avg_reading || 0,
+          recentVouchers: recentVouchers?.results || [],
+          recentReadings: recentReadings?.results || [],
+          linkedAccountCount: linkedAccounts.count || 0
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -1012,6 +1337,52 @@ app.get('/api/account/info', async (c) => {
   } catch (error) {
     console.error('Account info error:', error);
     return c.json({ error: 'Failed to fetch account info' }, 500);
+  }
+});
+
+// Account profile endpoint for admin navigation
+app.get('/api/account/profile', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+
+    // Get user's tenant and role information
+    const tenantInfo = await db.prepare(`
+      SELECT
+        t.id,
+        t.name,
+        tu.role
+      FROM tenant_users tu
+      JOIN tenants t ON tu.tenant_id = t.id
+      WHERE tu.user_id = ?
+    `).bind(user.userId).first();
+
+    if (tenantInfo) {
+      return c.json({
+        success: true,
+        user: {
+          id: user.userId,
+          email: user.email
+        },
+        tenant: {
+          id: tenantInfo.id,
+          name: tenantInfo.name,
+          role: tenantInfo.role
+        }
+      });
+    } else {
+      return c.json({
+        success: true,
+        user: {
+          id: user.userId,
+          email: user.email
+        },
+        tenant: null
+      });
+    }
+  } catch (error) {
+    console.error('Account profile error:', error);
+    return c.json({ error: 'Failed to fetch profile' }, 500);
   }
 });
 
@@ -2217,6 +2588,557 @@ app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c
   } catch (error) {
     console.error('Remove family member error:', error);
     return c.json({ error: 'Failed to remove family member' }, 500);
+  }
+});
+
+// ============================================================================
+// COMPREHENSIVE ADMIN API ENDPOINTS - SUPER ADMIN ONLY
+// ============================================================================
+
+// Admin middleware - requires super_admin role
+const superAdminMiddleware = async (c, next) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const db = c.env.DB;
+
+    // Check for super admin in tenant_users table first
+    const tenantAdminCheck = await db.prepare(`
+      SELECT tu.role FROM tenant_users tu
+      WHERE tu.user_id = ? AND tu.role = 'super_admin'
+    `).bind(user.userId).first();
+
+    // If not found in tenant_users, check users table directly
+    const userAdminCheck = await db.prepare(`
+      SELECT role FROM users
+      WHERE id = ? AND role = 'super_admin'
+    `).bind(user.userId).first();
+
+    if (!tenantAdminCheck && !userAdminCheck) {
+      return c.json({ error: 'Super admin access required' }, 403);
+    }
+
+    await next();
+  } catch (error) {
+    console.error('Super admin middleware error:', error);
+    return c.json({ error: 'Access denied' }, 403);
+  }
+};
+
+// Apply admin middleware to all admin routes
+app.use('/api/admin/*', authMiddleware, superAdminMiddleware);
+
+// ADMIN HISTORY - Get transactions for any user (super admin only)
+app.get('/api/admin/history/:userId', async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const month = c.req.query('month');
+    const db = c.env.DB;
+
+    if (!userId || isNaN(userId)) {
+      return c.json({ error: 'Valid user ID is required' }, 400);
+    }
+
+    // Verify user exists
+    const user = await db.prepare('SELECT id, email FROM users WHERE id = ?').bind(userId).first();
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Build query with optional month filter
+    let query = `
+      SELECT
+        r.id,
+        r.type,
+        r.amount,
+        r.reading,
+        r.created_at,
+        r.notes,
+        t.name as tenant_name
+      FROM readings r
+      LEFT JOIN tenants t ON r.tenant_id = t.id
+      WHERE r.user_id = ?
+    `;
+
+    const params = [userId];
+
+    if (month) {
+      query += ` AND DATE(r.created_at) >= ? AND DATE(r.created_at) < ?`;
+      const startDate = `${month}-01`;
+      const endDate = new Date(month + '-01');
+      endDate.setMonth(endDate.getMonth() + 1);
+      const endDateStr = endDate.toISOString().split('T')[0];
+      params.push(startDate, endDateStr);
+    }
+
+    query += ` ORDER BY r.created_at DESC LIMIT 100`;
+
+    const transactions = await db.prepare(query).bind(...params).all();
+
+    return c.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email
+        },
+        transactions: transactions.results || [],
+        totalCount: transactions.results?.length || 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin history error:', error);
+    return c.json({ error: 'Failed to fetch user history' }, 500);
+  }
+});
+
+// 1. SYSTEM OVERVIEW & METRICS
+app.get('/api/admin/system/overview', async (c) => {
+  try {
+    const db = c.env.DB;
+
+    // Get comprehensive electricity tracking admin metrics
+    const [
+      userStats,
+      familyStats,
+      electricityStats,
+      financialStats,
+      activityStats
+    ] = await Promise.all([
+      // Active users and growth
+      db.prepare(`
+        SELECT
+          COUNT(*) as totalUsers,
+          COUNT(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 END) as newUsersWeek,
+          COUNT(CASE WHEN created_at > datetime('now', '-30 days') THEN 1 END) as newUsersMonth
+        FROM users
+      `).first(),
+
+      // Family/Tenant statistics
+      db.prepare(`
+        SELECT
+          COUNT(*) as totalFamilies,
+          COUNT(CASE WHEN created_at > datetime('now', '-30 days') THEN 1 END) as newFamiliesMonth,
+          ROUND(AVG(member_count), 1) as avgFamilySize
+        FROM (
+          SELECT t.id, t.created_at, COUNT(tu.user_id) as member_count
+          FROM tenants t
+          LEFT JOIN tenant_users tu ON t.id = tu.tenant_id
+          GROUP BY t.id, t.created_at
+        )
+      `).first(),
+
+      // Electricity consumption & purchase statistics
+      db.prepare(`
+        SELECT
+          COUNT(CASE WHEN type = 'voucher' THEN 1 END) as totalVouchers,
+          COUNT(CASE WHEN type = 'reading' THEN 1 END) as totalReadings,
+          COALESCE(SUM(CASE WHEN type = 'voucher' THEN amount END), 0) as totalMoneySpent,
+          COALESCE(SUM(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-30 days') THEN amount END), 0) as moneySpentMonth,
+          COUNT(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-7 days') THEN 1 END) as vouchersWeek,
+          COUNT(CASE WHEN type = 'reading' AND created_at > datetime('now', '-7 days') THEN 1 END) as readingsWeek
+        FROM readings
+      `).first(),
+
+      // Financial insights
+      db.prepare(`
+        SELECT
+          COALESCE(ROUND(AVG(CASE WHEN type = 'voucher' THEN amount END), 2), 0) as avgVoucherAmount,
+          COALESCE(MAX(CASE WHEN type = 'voucher' THEN amount END), 0) as largestVoucher,
+          COUNT(DISTINCT user_id) as activeUsers30d
+        FROM readings
+        WHERE type = 'voucher' AND created_at > datetime('now', '-30 days')
+      `).first(),
+
+      // Recent activity and engagement
+      db.prepare(`
+        SELECT
+          COUNT(CASE WHEN created_at > datetime('now', '-1 day') THEN 1 END) as activity24h,
+          COUNT(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 END) as activity7d,
+          COUNT(DISTINCT user_id) as activeUsersWeek
+        FROM readings
+        WHERE created_at > datetime('now', '-7 days')
+      `).first()
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        totalUsers: userStats?.totalUsers || 0,
+        totalFamilies: familyStats?.totalFamilies || 0,
+        totalVouchers: electricityStats?.totalVouchers || 0,
+        totalReadings: electricityStats?.totalReadings || 0,
+        totalMoneySpent: electricityStats?.totalMoneySpent || 0,
+        moneySpentMonth: electricityStats?.moneySpentMonth || 0,
+        avgVoucherAmount: financialStats?.avgVoucherAmount || 0,
+        largestVoucher: financialStats?.largestVoucher || 0,
+        activeUsers30d: financialStats?.activeUsers30d || 0,
+        activity24h: activityStats?.activity24h || 0,
+        activity7d: activityStats?.activity7d || 0,
+        activeUsersWeek: activityStats?.activeUsersWeek || 0,
+        avgFamilySize: familyStats?.avgFamilySize || 0,
+        newUsersWeek: userStats?.newUsersWeek || 0,
+        newUsersMonth: userStats?.newUsersMonth || 0,
+        vouchersWeek: electricityStats?.vouchersWeek || 0,
+        readingsWeek: electricityStats?.readingsWeek || 0
+      }
+    });
+  } catch (error) {
+    console.error('System overview error:', error);
+    return c.json({ error: 'Failed to fetch system overview' }, 500);
+  }
+});
+
+// 2. USER MANAGEMENT
+app.get('/api/admin/users', async (c) => {
+  try {
+    const db = c.env.DB;
+    const page = parseInt(c.req.query('page') || '1');
+    const limit = parseInt(c.req.query('limit') || '50');
+    const search = c.req.query('search') || '';
+    const offset = (page - 1) * limit;
+
+    let searchFilter = '';
+    let searchParams = [limit, offset];
+
+    if (search) {
+      searchFilter = 'WHERE u.email LIKE ?';
+      searchParams = [`%${search}%`, limit, offset];
+    }
+
+    // Optimized query: Get users first, then join with aggregated counts
+    const users = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        u.updated_at,
+        t.name as tenant_name,
+        tu.role,
+        tu.joined_at,
+        COALESCE(rc.voucher_count, 0) as voucher_count,
+        COALESCE(rc.reading_count, 0) as reading_count
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COUNT(CASE WHEN type = 'voucher' THEN 1 END) as voucher_count,
+          COUNT(CASE WHEN type = 'reading' THEN 1 END) as reading_count
+        FROM readings
+        GROUP BY user_id
+      ) rc ON u.id = rc.user_id
+      ${searchFilter}
+      ORDER BY u.created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(...searchParams).all();
+
+    const totalCount = await db.prepare(`
+      SELECT COUNT(*) as count FROM users u ${searchFilter}
+    `).bind(search ? `%${search}%` : null).first();
+
+    return c.json({
+      success: true,
+      data: {
+        users: users.results || [],
+        pagination: {
+          page,
+          limit,
+          total: totalCount.count,
+          pages: Math.ceil(totalCount.count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Users list error:', error);
+    return c.json({ error: 'Failed to fetch users' }, 500);
+  }
+});
+
+// 2.1. LIGHTWEIGHT USER LIST (for dropdowns)
+app.get('/api/admin/users/list', async (c) => {
+  try {
+    const db = c.env.DB;
+    const limit = parseInt(c.req.query('limit') || '100');
+
+    // Lightweight query for dropdowns - no expensive calculations
+    const users = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        tu.role,
+        t.name as tenant_name
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      ORDER BY u.email ASC
+      LIMIT ?
+    `).bind(limit).all();
+
+    return c.json({
+      success: true,
+      data: {
+        users: users.results || []
+      }
+    });
+  } catch (error) {
+    console.error('User list error:', error);
+    return c.json({ error: 'Failed to fetch user list' }, 500);
+  }
+});
+
+// 3. USER DETAILS
+app.get('/api/admin/users/:userId', async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const db = c.env.DB;
+
+    const userDetails = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        u.updated_at,
+        t.id as tenant_id,
+        t.name as tenant_name,
+        tu.role,
+        tu.joined_at
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      WHERE u.id = ?
+    `).bind(userId).first();
+
+    if (!userDetails) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Get user's activity
+    const [vouchers, readings] = await Promise.all([
+      db.prepare(`
+        SELECT * FROM readings WHERE user_id = ? AND type = 'voucher' ORDER BY created_at DESC LIMIT 10
+      `).bind(userId).all(),
+
+      db.prepare(`
+        SELECT * FROM readings WHERE user_id = ? AND type = 'reading' ORDER BY created_at DESC LIMIT 10
+      `).bind(userId).all()
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        user: userDetails,
+        activity: {
+          vouchers: vouchers.results || [],
+          readings: readings.results || []
+        }
+      }
+    });
+  } catch (error) {
+    console.error('User details error:', error);
+    return c.json({ error: 'Failed to fetch user details' }, 500);
+  }
+});
+
+// 4. ADMIN PASSWORD RESET
+app.post('/api/admin/users/:userId/reset-password', async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const { newPassword } = await c.req.json();
+    const db = c.env.DB;
+
+    if (!newPassword || newPassword.length < 6) {
+      return c.json({ error: 'Password must be at least 6 characters long' }, 400);
+    }
+
+    const user = await db.prepare(`
+      SELECT email FROM users WHERE id = ?
+    `).bind(userId).first();
+
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await db.prepare(`
+      UPDATE users
+      SET password = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(hashedPassword, userId).run();
+
+    // Send email notification to user
+    try {
+      const emailService = new CloudflareEmailService(c.env);
+      await emailService.sendAdminPasswordResetNotification({
+        recipientEmail: user.email,
+        adminEmail: c.get('user')?.email || 'System Administrator'
+      });
+    } catch (emailError) {
+      console.error('Failed to send password reset notification email:', emailError);
+      // Don't fail the password reset if email fails
+    }
+
+    return c.json({
+      success: true,
+      message: `Password reset successfully for ${user.email}. Notification email sent.`
+    });
+  } catch (error) {
+    console.error('Admin password reset error:', error);
+    return c.json({ error: 'Failed to reset password' }, 500);
+  }
+});
+
+// 5. TENANT MANAGEMENT
+app.get('/api/admin/tenants', async (c) => {
+  try {
+    const db = c.env.DB;
+
+    const tenants = await db.prepare(`
+      SELECT
+        t.id,
+        t.name,
+        t.created_at,
+        COUNT(tu.user_id) as member_count,
+        COALESCE(SUM(v.rand_amount), 0) as total_spent,
+        COALESCE(SUM(v.kwh_amount), 0) as total_kwh,
+        COUNT(v.id) as voucher_count,
+        COUNT(r.id) as reading_count
+      FROM tenants t
+      LEFT JOIN tenant_users tu ON t.id = tu.tenant_id
+      LEFT JOIN vouchers v ON t.id = v.tenant_id
+      LEFT JOIN readings r ON t.id = r.tenant_id
+      GROUP BY t.id, t.name, t.created_at
+      ORDER BY t.created_at DESC
+    `).all();
+
+    return c.json({
+      success: true,
+      data: tenants.results || []
+    });
+  } catch (error) {
+    console.error('Tenants list error:', error);
+    return c.json({ error: 'Failed to fetch tenants' }, 500);
+  }
+});
+
+// 6. SYSTEM MAINTENANCE
+app.post('/api/admin/system/cleanup', async (c) => {
+  try {
+    const db = c.env.DB;
+    const { action } = await c.req.json();
+
+    let result = {};
+
+    switch (action) {
+      case 'expired_tokens':
+        const tokenCleanup = await db.prepare(`
+          DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')
+        `).run();
+        result.message = `Cleaned up ${tokenCleanup.changes} expired password reset tokens`;
+        break;
+
+      case 'expired_invites':
+        const inviteCleanup = await db.prepare(`
+          UPDATE invite_codes SET is_active = 0 WHERE expires_at < datetime('now')
+        `).run();
+        result.message = `Deactivated ${inviteCleanup.changes} expired invite codes`;
+        break;
+
+      case 'orphaned_data':
+        // Clean up vouchers/readings without valid users
+        const orphanedVouchers = await db.prepare(`
+          DELETE FROM vouchers WHERE user_id NOT IN (SELECT id FROM users)
+        `).run();
+        const orphanedReadings = await db.prepare(`
+          DELETE FROM readings WHERE user_id NOT IN (SELECT id FROM users)
+        `).run();
+        result.message = `Cleaned up ${orphanedVouchers.changes} orphaned vouchers and ${orphanedReadings.changes} orphaned readings`;
+        break;
+
+      default:
+        return c.json({ error: 'Invalid cleanup action' }, 400);
+    }
+
+    return c.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('System cleanup error:', error);
+    return c.json({ error: 'Failed to perform cleanup' }, 500);
+  }
+});
+
+// 7. DATA EXPORT
+app.get('/api/admin/export/:type', async (c) => {
+  try {
+    const type = c.req.param('type');
+    const db = c.env.DB;
+
+    let data = [];
+    let filename = '';
+
+    switch (type) {
+      case 'users':
+        const users = await db.prepare(`
+          SELECT u.*, t.name as tenant_name, tu.role
+          FROM users u
+          LEFT JOIN tenant_users tu ON u.id = tu.user_id
+          LEFT JOIN tenants t ON tu.tenant_id = t.id
+          ORDER BY u.created_at DESC
+        `).all();
+        data = users.results || [];
+        filename = `users-export-${Date.now()}.json`;
+        break;
+
+      case 'vouchers':
+        const vouchers = await db.prepare(`
+          SELECT v.*, u.email as user_email, t.name as tenant_name
+          FROM vouchers v
+          JOIN users u ON v.user_id = u.id
+          JOIN tenants t ON v.tenant_id = t.id
+          ORDER BY v.created_at DESC
+        `).all();
+        data = vouchers.results || [];
+        filename = `vouchers-export-${Date.now()}.json`;
+        break;
+
+      case 'system':
+        const systemData = await db.prepare(`
+          SELECT
+            (SELECT COUNT(*) FROM users) as total_users,
+            (SELECT COUNT(*) FROM tenants) as total_tenants,
+            (SELECT COUNT(*) FROM vouchers) as total_vouchers,
+            (SELECT COUNT(*) FROM readings) as total_readings,
+            (SELECT COALESCE(SUM(rand_amount), 0) FROM vouchers) as total_money,
+            datetime('now') as export_timestamp
+        `).first();
+        data = [systemData];
+        filename = `system-export-${Date.now()}.json`;
+        break;
+
+      default:
+        return c.json({ error: 'Invalid export type' }, 400);
+    }
+
+    c.header('Content-Type', 'application/json');
+    c.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+    return c.json({
+      exportType: type,
+      timestamp: new Date().toISOString(),
+      count: data.length,
+      data: data
+    });
+  } catch (error) {
+    console.error('Data export error:', error);
+    return c.json({ error: 'Failed to export data' }, 500);
   }
 });
 

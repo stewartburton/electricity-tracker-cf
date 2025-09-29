@@ -86,6 +86,66 @@
         .monthly-card.clickable:hover {
             transform: translateY(-2px);
         }
+
+        /* Loading Spinner */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.show {
+            opacity: 1;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #18CCFC;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stats-grid .stat-card {
+            position: relative;
+        }
+
+        /* Mobile-friendly loading spinners */
+        @media (max-width: 768px) {
+            .loading-spinner {
+                width: 30px;
+                height: 30px;
+                border-width: 2px;
+            }
+
+            .loading-overlay {
+                background: rgba(255, 255, 255, 0.95);
+            }
+
+            .stats-grid {
+                gap: 15px;
+            }
+
+            .stat-card {
+                min-height: 120px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -149,12 +209,18 @@
                     <h3 id="totalAmount">R0.00</h3>
                     <p>TOTAL SPENT</p>
                 </div>
+                <div class="loading-overlay" id="totalAmountLoader">
+                    <div class="loading-spinner"></div>
+                </div>
             </div>
             <div class="stat-card comet-card">
                 <div class="stat-icon">⚡</div>
                 <div class="stat-content">
                     <h3 id="totalUnits">0 kWh</h3>
                     <p>TOTAL KWH</p>
+                </div>
+                <div class="loading-overlay" id="totalUnitsLoader">
+                    <div class="loading-spinner"></div>
                 </div>
             </div>
             <div class="stat-card comet-card">
@@ -163,12 +229,18 @@
                     <h3 id="avgCost">R0.00/kWh</h3>
                     <p>AVG COST</p>
                 </div>
+                <div class="loading-overlay" id="avgCostLoader">
+                    <div class="loading-spinner"></div>
+                </div>
             </div>
-            <div class="stat-card comet-card">
+            <div class="stat-card comet-card" id="fourthStatCard">
                 <div class="stat-icon">📋</div>
                 <div class="stat-content">
                     <h3 id="totalVat">R0.00</h3>
                     <p>TOTAL VAT</p>
+                </div>
+                <div class="loading-overlay" id="fourthStatLoader">
+                    <div class="loading-spinner"></div>
                 </div>
             </div>
         </div>
@@ -235,39 +307,100 @@
         }
         
         async function loadDashboard() {
+            let loadingTimer;
             try {
-                ET.utils.showLoading(true);
-                
+                // Show loading spinners after 1 second if still loading
+                loadingTimer = setTimeout(() => {
+                    showStatsLoading(true);
+                }, 1000);
+
                 const data = await ET.api.get('/api/dashboard');
+
+                // Clear loading timer and hide spinners
+                clearTimeout(loadingTimer);
+                showStatsLoading(false);
                 
-                if (data) {
-                    // Update stats
-                    document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
-                    document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
-                    document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
-                    document.getElementById('totalVat').textContent = ET.utils.formatCurrency(data.totalVat);
+                if (data && data.success !== false) {
+                    // Handle super admin vs regular user view
+                    if (data.isSuperAdmin) {
+                        // Update title for super admin
+                        document.querySelector('.dashboard-title').innerHTML = `
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+                            </svg>
+                            Platform Overview Dashboard
+                        `;
+                        document.querySelector('.dashboard-subtitle').textContent = 'Monitor electricity usage across all users';
+
+                        // Update stats for super admin
+                        document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
+                        document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
+                        document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
+
+                        // Show platform stats instead of VAT for super admin
+                        const fourthCard = document.getElementById('fourthStatCard');
+                        fourthCard.innerHTML = `
+                            <div class="stat-icon">👥</div>
+                            <div class="stat-content">
+                                <h3>${data.totalUsers || 0}</h3>
+                                <p>TOTAL USERS</p>
+                            </div>
+                        `;
+
+                        // Add an extra stat for families if we have the data
+                        if (data.totalFamilies !== undefined) {
+                            // Add after the existing stats
+                            const statsGrid = document.querySelector('.stats-grid');
+                            const familiesCard = document.createElement('div');
+                            familiesCard.className = 'stat-card comet-card';
+                            familiesCard.innerHTML = `
+                                <div class="stat-icon">🏠</div>
+                                <div class="stat-content">
+                                    <h3>${data.totalFamilies || 0}</h3>
+                                    <p>FAMILIES</p>
+                                </div>
+                            `;
+
+                            // Remove VAT card and add families card
+                            if (statsGrid.children.length === 4) {
+                                statsGrid.appendChild(familiesCard);
+                            }
+                        }
+                    } else {
+                        // Regular user view
+                        document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
+                        document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
+                        document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
+                        document.getElementById('totalVat').textContent = ET.utils.formatCurrency(data.totalVat);
+                    }
                     
                     // Display recent vouchers
                     if (data.recentVouchers && data.recentVouchers.length > 0) {
-                        const vouchersHtml = data.recentVouchers.map(v => `
-                            <div class="recent-item">
-                                <span>Voucher ${ET.utils.formatCurrency(v.rand_amount)} - ${v.kwh_amount} kWh</span>
-                                <small>${ET.utils.formatDateTime(v.purchase_date)}</small>
-                            </div>
-                        `).join('');
+                        const vouchersHtml = data.recentVouchers.map(v => {
+                            const tenantInfo = data.isSuperAdmin && v.tenant_name ? ` (${v.tenant_name})` : '';
+                            return `
+                                <div class="recent-item">
+                                    <span>Voucher ${ET.utils.formatCurrency(v.rand_amount)} - ${v.kwh_amount} kWh${tenantInfo}</span>
+                                    <small>${ET.utils.formatDateTime(v.purchase_date)}</small>
+                                </div>
+                            `;
+                        }).join('');
                         document.getElementById('recentVouchers').innerHTML = vouchersHtml;
                     } else {
                         document.getElementById('recentVouchers').innerHTML = '<div class="recent-item"><span>No vouchers yet</span></div>';
                     }
-                    
+
                     // Display recent readings
                     if (data.recentReadings && data.recentReadings.length > 0) {
-                        const readingsHtml = data.recentReadings.map(r => `
-                            <div class="recent-item">
-                                <span>Reading: ${r.reading_value} kWh</span>
-                                <small>${ET.utils.formatDateTime(r.reading_date)}</small>
-                            </div>
-                        `).join('');
+                        const readingsHtml = data.recentReadings.map(r => {
+                            const tenantInfo = data.isSuperAdmin && r.tenant_name ? ` (${r.tenant_name})` : '';
+                            return `
+                                <div class="recent-item">
+                                    <span>Reading: ${r.reading_value} kWh${tenantInfo}</span>
+                                    <small>${ET.utils.formatDateTime(r.reading_date)}</small>
+                                </div>
+                            `;
+                        }).join('');
                         document.getElementById('recentReadings').innerHTML = readingsHtml;
                     } else {
                         document.getElementById('recentReadings').innerHTML = '<div class="recent-item"><span>No readings yet</span></div>';
@@ -310,9 +443,33 @@
             } catch (error) {
                 console.error('Dashboard error:', error);
                 ET.utils.showMessage('Failed to load dashboard data', 'error');
-            } finally {
-                ET.utils.showLoading(false);
+
+                // Clear loading timer and hide spinners on error
+                if (loadingTimer) {
+                    clearTimeout(loadingTimer);
+                }
+                showStatsLoading(false);
             }
+        }
+
+        function showStatsLoading(show) {
+            const loaders = [
+                'totalAmountLoader',
+                'totalUnitsLoader',
+                'avgCostLoader',
+                'fourthStatLoader'
+            ];
+
+            loaders.forEach(loaderId => {
+                const loader = document.getElementById(loaderId);
+                if (loader) {
+                    if (show) {
+                        loader.classList.add('show');
+                    } else {
+                        loader.classList.remove('show');
+                    }
+                }
+            });
         }
         
         function renderConsumptionChart(monthlyData) {

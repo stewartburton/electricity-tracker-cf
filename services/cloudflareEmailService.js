@@ -221,6 +221,79 @@ class CloudflareEmailService {
         </div>
     </div>
 </body>
+</html>`,
+
+      'admin-password-reset.html': `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your password has been reset by an administrator</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #f9f9f9; padding: 30px; border-radius: 10px; }
+        .header { background: #c27d18; color: white; padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
+        .content { background: white; padding: 30px; border-radius: 8px; }
+        .alert { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .button { background: #c27d18; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
+        .security-tip { background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 15px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ PowerMeter</h1>
+            <p>Password Reset Notification</p>
+        </div>
+        <div class="content">
+            <div class="alert">
+                <strong>🔐 Important Security Notice</strong>
+            </div>
+
+            <h2>Your password has been reset</h2>
+
+            <p>This email is to notify you that your PowerMeter account password has been reset by an administrator.</p>
+
+            <div class="security-tip">
+                <p><strong>Details:</strong></p>
+                <ul>
+                    <li><strong>Account:</strong> {{recipientEmail}}</li>
+                    <li><strong>Reset by:</strong> {{adminEmail}}</li>
+                    <li><strong>Date & Time:</strong> {{resetDateTime}}</li>
+                </ul>
+            </div>
+
+            <p>If this action was expected (such as during account recovery or a security update), no further action is needed.</p>
+
+            <p><strong>If you did not request this password reset:</strong></p>
+            <ul>
+                <li>Contact your system administrator immediately</li>
+                <li>Report this incident if you suspect unauthorized access</li>
+                <li>Consider changing your password again for added security</li>
+            </ul>
+
+            <p style="text-align: center;">
+                <a href="{{loginUrl}}" class="button">Log In to PowerMeter</a>
+            </p>
+
+            <div class="security-tip">
+                <p><strong>Security Tips:</strong></p>
+                <ul>
+                    <li>Use a strong, unique password for your account</li>
+                    <li>Enable two-factor authentication if available</li>
+                    <li>Never share your login credentials with others</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer">
+            <p>You are receiving this email for security purposes regarding your PowerMeter account.</p>
+            <p>If you have questions about this notification, please contact your administrator.</p>
+            <p>© {{year}} PowerMeter - Electricity Usage Tracking</p>
+        </div>
+    </div>
+</body>
 </html>`
     };
 
@@ -436,6 +509,54 @@ class CloudflareEmailService {
     const textContent = this.htmlToText(htmlContent);
 
     const subject = `${templateVariables.productName} password reset instructions`;
+
+    const result = await this.sendEmail(
+      data.recipientEmail,
+      subject,
+      htmlContent,
+      textContent
+    );
+
+    return {
+      success: result.success,
+      error: result.error,
+      subject,
+      htmlBody: htmlContent,
+      textBody: textContent,
+      messageId: result.data?.id || 'unknown',
+      threadId: result.data?.id || 'unknown'
+    };
+  }
+
+  async sendAdminPasswordResetNotification(data) {
+    if (!data?.recipientEmail) {
+      throw new Error('recipientEmail is required for admin password reset notifications');
+    }
+
+    const currentDate = new Date();
+    const resetDateTime = currentDate.toLocaleString('en-ZA', {
+      timeZone: 'Africa/Johannesburg',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    const templateVariables = {
+      recipientEmail: data.recipientEmail,
+      adminEmail: data.adminEmail || 'System Administrator',
+      resetDateTime: resetDateTime,
+      loginUrl: `${this.baseUrl}/login`,
+      year: currentDate.getFullYear()
+    };
+
+    const template = this.getTemplate('admin-password-reset.html');
+    const htmlContent = this.renderTemplate(template, templateVariables);
+    const textContent = this.htmlToText(htmlContent);
+
+    const subject = '🔐 Your PowerMeter password has been reset by an administrator';
 
     const result = await this.sendEmail(
       data.recipientEmail,

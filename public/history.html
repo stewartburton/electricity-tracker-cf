@@ -183,6 +183,328 @@
                 margin: 20px;
             }
         }
+
+        /* Admin history styles */
+        .admin-section {
+            margin: 20px auto;
+            max-width: 1200px;
+        }
+
+        .admin-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .card-header p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .user-selection {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .form-select, .form-input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .primary-btn, .secondary-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .primary-btn {
+            background: #007bff;
+            color: white;
+        }
+
+        .primary-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .secondary-btn {
+            background: #6c757d;
+            color: white;
+        }
+
+        .selected-user-info {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .selected-user-info h3 {
+            color: #333;
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+        }
+
+        .selected-user-info p {
+            color: #666;
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .view-only {
+            color: #6c757d;
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .user-selection {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .form-actions {
+                justify-content: stretch;
+            }
+
+            .primary-btn, .secondary-btn {
+                flex: 1;
+            }
+        }
+
+        /* Mobile optimization and prevent sliding bug */
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: hidden !important;
+            position: relative !important;
+            max-width: 100vw !important;
+        }
+
+        body {
+            touch-action: manipulation !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* Prevent horizontal scrolling on all containers */
+        .history-container,
+        .history-content,
+        .history-table-container,
+        .admin-section,
+        .admin-card,
+        nav {
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }
+
+        /* Mobile input focus fix */
+        input, textarea, select {
+            max-width: 100% !important;
+            touch-action: manipulation !important;
+        }
+
+        /* Prevent viewport issues on mobile */
+        @media screen and (max-width: 768px) {
+            html {
+                -webkit-text-size-adjust: 100% !important;
+                -moz-text-size-adjust: 100% !important;
+                -ms-text-size-adjust: 100% !important;
+            }
+
+            body {
+                min-height: 100vh !important;
+                min-height: -webkit-fill-available !important;
+            }
+
+            /* Fix input zooming on iOS */
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="search"],
+            input[type="month"],
+            textarea,
+            select {
+                font-size: 16px !important;
+                transform: translateZ(0) !important;
+                -webkit-appearance: none !important;
+            }
+
+            /* History container mobile fixes */
+            .history-container {
+                padding: 10px !important;
+                margin: 0 !important;
+            }
+
+            .history-header {
+                padding: 15px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .history-title {
+                font-size: 1.5rem !important;
+            }
+
+            /* Admin section mobile optimization */
+            .admin-section {
+                margin: 10px 0 !important;
+                padding: 0 !important;
+            }
+
+            .admin-card {
+                margin: 10px 0 !important;
+                padding: 15px !important;
+                border-radius: 8px !important;
+            }
+
+            /* History table mobile fixes */
+            .history-table-container {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                margin: 0 -10px !important;
+                padding: 0 10px !important;
+            }
+
+            .history-table {
+                min-width: 700px !important;
+                font-size: 14px !important;
+            }
+
+            .history-table th,
+            .history-table td {
+                padding: 8px 4px !important;
+                font-size: 12px !important;
+            }
+
+            /* Form elements mobile optimization */
+            .form-group {
+                margin-bottom: 15px !important;
+            }
+
+            .form-select, .form-input {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+                border-radius: 6px !important;
+            }
+
+            /* Button mobile optimization */
+            .primary-btn, .secondary-btn {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+                margin-bottom: 10px !important;
+            }
+
+            /* Tab buttons mobile fix */
+            .tab-buttons {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 5px !important;
+            }
+
+            .tab-btn {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+            }
+
+            /* Mobile navigation fixes */
+            .nav-links {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+
+            /* Modal mobile fixes */
+            .modal-content {
+                margin: 20px !important;
+                padding: 20px !important;
+                max-width: calc(100vw - 40px) !important;
+                max-height: calc(100vh - 40px) !important;
+                overflow-y: auto !important;
+            }
+
+            /* User selection grid mobile fix */
+            .user-selection {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+
+            /* Selected user info mobile */
+            .selected-user-info {
+                padding: 12px !important;
+                margin-top: 12px !important;
+            }
+        }
+
+        /* Landscape mobile fix */
+        @media screen and (max-width: 896px) and (orientation: landscape) {
+            body {
+                height: 100vh !important;
+                overflow-x: hidden !important;
+            }
+
+            .history-container {
+                height: calc(100vh - 60px) !important;
+                overflow-y: auto !important;
+            }
+        }
+
+        /* Extra small devices fix */
+        @media screen and (max-width: 480px) {
+            .history-table {
+                min-width: 600px !important;
+            }
+
+            .history-table th,
+            .history-table td {
+                padding: 6px 2px !important;
+                font-size: 11px !important;
+            }
+
+            .admin-card {
+                padding: 12px !important;
+                margin: 8px 0 !important;
+            }
+
+            .card-header h2 {
+                font-size: 1.2rem !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -212,7 +534,37 @@
                 Transaction History
             </h1>
         </div>
-        
+
+        <!-- Admin User Selection - Super Admin Only -->
+        <div id="adminUserSelection" class="admin-section" style="display: none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>👤 Select User</h2>
+                    <p>Choose a user to view their transaction history</p>
+                </div>
+                <div class="user-selection">
+                    <div class="form-group">
+                        <label for="userSelect">Select User:</label>
+                        <select id="userSelect" class="form-select">
+                            <option value="">Loading users...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="monthFilter">Filter by Month (optional):</label>
+                        <input type="month" id="monthFilter" class="form-input">
+                    </div>
+                    <div class="form-actions">
+                        <button id="loadUserHistoryBtn" class="primary-btn" disabled>📊 Load History</button>
+                        <button id="clearSelectionBtn" class="secondary-btn">🔄 Clear</button>
+                    </div>
+                </div>
+                <div id="selectedUserInfo" class="selected-user-info" style="display: none;">
+                    <h3 id="selectedUserEmail">Selected User</h3>
+                    <p id="selectedUserStats">Statistics will appear here</p>
+                </div>
+            </div>
+        </div>
+
         <div class="history-tabs">
             <div class="tab-buttons">
                 <button class="tab-btn" data-tab="vouchers">💳 Vouchers</button>
@@ -655,8 +1007,209 @@
             });
         });
 
+        // Admin history functionality
+        let isAdminUser = false;
+        let allUsers = [];
+
+        async function checkAdminStatus() {
+            const ET = window.ElectricityTracker;
+            if (!ET || !ET.auth.isAuthenticated()) {
+                return false;
+            }
+
+            try {
+                const response = await ET.api.get('/api/account/profile');
+                if (response?.tenant?.role === 'super_admin') {
+                    isAdminUser = true;
+                    await setupAdminHistory();
+                    return true;
+                }
+            } catch (error) {
+                console.log('Could not check admin status:', error);
+            }
+            return false;
+        }
+
+        async function setupAdminHistory() {
+            const adminSection = document.getElementById('adminUserSelection');
+            const regularTabs = document.querySelector('.history-tabs');
+
+            // Show admin section, hide regular tabs
+            adminSection.style.display = 'block';
+            regularTabs.style.display = 'none';
+
+            // Load all users
+            await loadAllUsers();
+
+            // Set up event listeners
+            document.getElementById('userSelect').addEventListener('change', handleUserSelection);
+            document.getElementById('loadUserHistoryBtn').addEventListener('click', loadSelectedUserHistory);
+            document.getElementById('clearSelectionBtn').addEventListener('click', clearSelection);
+        }
+
+        async function loadAllUsers() {
+            const ET = window.ElectricityTracker;
+            try {
+                // Use the lightweight endpoint for better performance
+                const response = await ET.api.get('/api/admin/users/list?limit=200');
+                if (response?.success) {
+                    allUsers = response.data.users || [];
+                    populateUserSelect();
+                    console.log(`Loaded ${allUsers.length} users for selection`);
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+                ET.utils.showMessage('Failed to load users: ' + error.message, 'error');
+            }
+        }
+
+        function populateUserSelect() {
+            const userSelect = document.getElementById('userSelect');
+            userSelect.innerHTML = '<option value="">Select a user...</option>';
+
+            allUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.email} (${user.role || 'member'})`;
+                userSelect.appendChild(option);
+            });
+        }
+
+        function handleUserSelection() {
+            const userSelect = document.getElementById('userSelect');
+            const loadBtn = document.getElementById('loadUserHistoryBtn');
+            const userInfo = document.getElementById('selectedUserInfo');
+
+            if (userSelect.value) {
+                loadBtn.disabled = false;
+                const selectedUser = allUsers.find(u => u.id == userSelect.value);
+                if (selectedUser) {
+                    document.getElementById('selectedUserEmail').textContent = `Selected: ${selectedUser.email}`;
+                    document.getElementById('selectedUserStats').textContent = `Role: ${selectedUser.role || 'member'} | Tenant: ${selectedUser.tenant_name || 'No tenant'}`;
+                    userInfo.style.display = 'block';
+                }
+            } else {
+                loadBtn.disabled = true;
+                userInfo.style.display = 'none';
+            }
+        }
+
+        async function loadSelectedUserHistory() {
+            const userSelect = document.getElementById('userSelect');
+            const monthFilter = document.getElementById('monthFilter');
+            const userId = userSelect.value;
+
+            if (!userId) return;
+
+            const ET = window.ElectricityTracker;
+            try {
+                let url = `/api/admin/history/${userId}`;
+                if (monthFilter.value) {
+                    url += `?month=${monthFilter.value}`;
+                }
+
+                const response = await ET.api.get(url);
+                if (response?.success) {
+                    displayAdminHistory(response.data);
+                    // Update header to show selected user
+                    const header = document.querySelector('.history-table-header h2');
+                    header.textContent = `📋 History for ${response.data.user.email}`;
+                }
+            } catch (error) {
+                console.error('Failed to load user history:', error);
+                ET.utils.showMessage('Failed to load user history', 'error');
+            }
+        }
+
+        function displayAdminHistory(data) {
+            const tbody = document.getElementById('historyTableBody');
+            if (!data.transactions || data.transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">No transactions found for this user.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.transactions.map(transaction => {
+                const date = new Date(transaction.created_at);
+                const formattedDate = date.toLocaleDateString('en-ZA');
+                const formattedTime = date.toLocaleTimeString('en-ZA', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="date-time">
+                                <div class="date">${formattedDate}</div>
+                                <div class="time">${formattedTime}</div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="transaction-type ${transaction.type}">
+                                ${transaction.type === 'voucher' ? '💳 Voucher' : '📊 Reading'}
+                            </span>
+                        </td>
+                        <td>
+                            ${transaction.type === 'voucher' ?
+                                `Purchase of R${transaction.amount} electricity` :
+                                `Meter reading: ${transaction.reading} kWh`}
+                        </td>
+                        <td>
+                            ${transaction.type === 'voucher' ?
+                                `R${parseFloat(transaction.amount).toFixed(2)}` :
+                                '-'}
+                        </td>
+                        <td>
+                            ${transaction.type === 'reading' ?
+                                `${transaction.reading} kWh` :
+                                '-'}
+                        </td>
+                        <td>${transaction.notes || '-'}</td>
+                        <td>
+                            <span class="view-only">View Only</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function clearSelection() {
+            document.getElementById('userSelect').value = '';
+            document.getElementById('monthFilter').value = '';
+            document.getElementById('selectedUserInfo').style.display = 'none';
+            document.getElementById('loadUserHistoryBtn').disabled = true;
+
+            // Clear history table
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">Select a user to view their transaction history.</td></tr>';
+
+            // Reset header
+            const header = document.querySelector('.history-table-header h2');
+            header.textContent = '📋 Admin History View';
+        }
+
         // Event listeners for modal
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            const ET = window.ElectricityTracker;
+
+            if (!ET) {
+                console.error('ElectricityTracker not found');
+                return;
+            }
+
+            // Check authentication
+            if (!ET.auth.checkAuth()) return;
+
+            // Add admin navigation
+            ET.addAdminNavigation();
+
+            // Check if user is super admin and setup admin history if so
+            const isAdmin = await checkAdminStatus();
+            if (!isAdmin) {
+                // If not admin, load regular history (existing functionality)
+                // You may want to call your existing loadTransactions() function here
+            }
+
             // Cancel delete button
             document.getElementById('cancelDelete').addEventListener('click', hideDeleteConfirmation);
 

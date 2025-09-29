@@ -5,6 +5,83 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - PowerMeter</title>
     <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        /* Loading Spinner */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.show {
+            opacity: 1;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #18CCFC;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .overview-grid .stat-card {
+            position: relative;
+        }
+
+        /* Mobile-friendly loading spinners */
+        @media (max-width: 768px) {
+            .loading-spinner {
+                width: 30px;
+                height: 30px;
+                border-width: 2px;
+            }
+
+            .loading-overlay {
+                background: rgba(255, 255, 255, 0.95);
+            }
+
+            .overview-grid {
+                gap: 15px;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .stat-card {
+                min-height: 100px;
+                padding: 15px;
+            }
+
+            .admin-card {
+                margin: 10px 0;
+                padding: 15px;
+            }
+
+            .card-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .card-header h2 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <nav>
@@ -33,96 +110,290 @@
                 </svg>
                 Admin Panel
             </h1>
-            <p class="page-subtitle">Manage family members and system settings</p>
+            <p id="adminSubtitle" class="page-subtitle">Loading administration dashboard...</p>
         </div>
 
-        <div class="admin-dashboard">
-            <!-- Family Management Section -->
-            <div class="admin-section">
-                <div class="admin-card">
-                    <div class="card-header">
-                        <h2>👥 Family Management</h2>
-                        <p>Manage family members and invitations</p>
-                    </div>
+        <!-- System Overview - Super Admin Only -->
+        <div id="systemOverview" class="admin-section" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>📊 System Overview</h2>
+                    <button id="refreshOverviewBtn" class="secondary-btn">🔄 Refresh</button>
+                </div>
+                <div id="systemMetrics" class="metrics-grid">
+                    <!-- System metrics will be loaded here -->
+                </div>
+            </div>
+        </div>
 
+        <!-- User Management - Super Admin Only -->
+        <div id="userManagement" class="admin-section" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>👥 User Management</h2>
                     <div class="admin-actions">
-                        <button id="generateInviteBtn" class="primary-btn">
-                            📧 Generate Invite Code
-                        </button>
-
-                        <button id="sendEmailInviteBtn" class="secondary-btn">
-                            ✉️ Send Email Invitation
-                        </button>
-
-                        <button id="viewFamilyBtn" class="secondary-btn">
-                            👥 View Family Members
-                        </button>
-                    </div>
-
-                    <div id="inviteResult" class="result-section" style="display: none;"></div>
-                </div>
-            </div>
-
-            <!-- Email Invitation Section -->
-            <div class="admin-section" id="emailInviteSection" style="display: none;">
-                <div class="admin-card">
-                    <div class="card-header">
-                        <h3>Send Email Invitation</h3>
-                    </div>
-
-                    <form id="emailInviteForm" class="admin-form">
-                        <div class="form-group">
-                            <label for="inviteEmail">Email Address</label>
-                            <input type="email" id="inviteEmail" required placeholder="friend@example.com">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="inviteMessage">Personal Message (Optional)</label>
-                            <textarea id="inviteMessage" rows="3" placeholder="Come join our family's electricity tracking..."></textarea>
-                        </div>
-
-                        <div class="form-actions">
-                            <button type="submit" class="primary-btn">Send Invitation</button>
-                            <button type="button" id="cancelEmailInvite" class="secondary-btn">Cancel</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Family Members Section -->
-            <div class="admin-section" id="familyMembersSection" style="display: none;">
-                <div class="admin-card">
-                    <div class="card-header">
-                        <h3>Family Members</h3>
-                        <button id="refreshMembersBtn" class="secondary-btn">🔄 Refresh</button>
-                    </div>
-
-                    <div id="familyMembersList" class="members-list">
-                        <!-- Family members will be loaded here -->
+                        <input type="text" id="userSearchInput" placeholder="Search users by email..." class="search-input">
+                        <button id="searchUsersBtn" class="secondary-btn">🔍 Search</button>
+                        <button id="exportUsersBtn" class="secondary-btn">📊 Export Users</button>
                     </div>
                 </div>
+                <div id="usersList" class="users-list">
+                    <!-- Users will be loaded here -->
+                </div>
+                <div id="usersPagination" class="pagination">
+                    <!-- Pagination will be added here -->
+                </div>
             </div>
+        </div>
 
-            <!-- System Information Section -->
-            <div class="admin-section">
-                <div class="admin-card">
-                    <div class="card-header">
-                        <h2>📊 System Information</h2>
+        <!-- Tenant Management - Super Admin Only -->
+        <div id="tenantManagement" class="admin-section" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>🏠 Tenant Management</h2>
+                    <button id="refreshTenantsBtn" class="secondary-btn">🔄 Refresh</button>
+                </div>
+                <div id="tenantsList" class="tenants-list">
+                    <!-- Tenants will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- System Maintenance - Super Admin Only -->
+        <div id="systemMaintenance" class="admin-section" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>🔧 System Maintenance</h2>
+                    <p>Perform system cleanup and maintenance tasks</p>
+                </div>
+                <div class="maintenance-actions">
+                    <button id="cleanupTokensBtn" class="maintenance-btn">🗑️ Clean Expired Tokens</button>
+                    <button id="cleanupInvitesBtn" class="maintenance-btn">📧 Clean Expired Invites</button>
+                    <button id="cleanupOrphanedBtn" class="maintenance-btn">🧹 Clean Orphaned Data</button>
+                </div>
+                <div id="maintenanceResults" class="maintenance-results">
+                    <!-- Results will be shown here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- System Overview Section - Super Admins Only -->
+        <div id="systemOverview" class="admin-section super-admin-only" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>📊 System Overview</h2>
+                    <p>System-wide statistics and metrics</p>
+                </div>
+                <div class="overview-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalUsers">Loading...</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalTenants">Loading...</div>
+                        <div class="stat-label">Total Families</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalReadings">Loading...</div>
+                        <div class="stat-label">Total Readings</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalVouchers">Loading...</div>
+                        <div class="stat-label">Total Vouchers</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Management Section - Super Admins Only -->
+        <div id="userManagement" class="admin-section super-admin-only" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>👤 User Management</h2>
+                    <p>Manage all system users</p>
+                </div>
+                <div class="admin-actions">
+                    <button id="loadUsersBtn" class="primary-btn">📋 View All Users</button>
+                    <button id="searchUsersBtn" class="secondary-btn">🔍 Search Users</button>
+                </div>
+
+                <div id="userSearchSection" style="display: none;">
+                    <div class="form-group">
+                        <input type="text" id="userSearchInput" placeholder="Search by email or name...">
+                        <button id="performUserSearchBtn" class="secondary-btn">Search</button>
+                    </div>
+                </div>
+
+                <div id="usersListSection" style="display: none;">
+                    <div class="users-controls">
+                        <span id="usersCount">0 users found</span>
+                        <button id="refreshUsersBtn" class="secondary-btn">🔄 Refresh</button>
+                    </div>
+                    <div id="usersList">
+                        <!-- Users will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tenant Management Section - Super Admins Only -->
+        <div id="tenantManagement" class="admin-section super-admin-only" style="display:none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>🏠 Tenant Management</h2>
+                    <p>Manage family accounts and tenants</p>
+                </div>
+                <div class="admin-actions">
+                    <button id="loadTenantsBtn" class="primary-btn">📋 View All Families</button>
+                    <button id="tenantStatsBtn" class="secondary-btn">📈 Family Statistics</button>
+                </div>
+
+                <div id="tenantsListSection" style="display: none;">
+                    <div class="tenants-controls">
+                        <span id="tenantsCount">0 families found</span>
+                        <button id="refreshTenantsBtn" class="secondary-btn">🔄 Refresh</button>
+                    </div>
+                    <div id="tenantsList">
+                        <!-- Tenants will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Family Management Section - All Admins -->
+        <div id="familyManagement" class="admin-section">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>👥 Family Management</h2>
+                    <p>Manage family members and invitations</p>
+                </div>
+
+                <div class="admin-actions">
+                    <button id="generateInviteBtn" class="primary-btn">
+                        📧 Generate Invite Code
+                    </button>
+
+                    <button id="sendEmailInviteBtn" class="secondary-btn">
+                        ✉️ Send Email Invitation
+                    </button>
+
+                    <button id="viewFamilyBtn" class="secondary-btn">
+                        👥 View Family Members
+                    </button>
+                </div>
+
+                <div id="inviteResult" class="result-section" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Email Invitation Section -->
+        <div class="admin-section" id="emailInviteSection" style="display: none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h3>Send Email Invitation</h3>
+                </div>
+
+                <form id="emailInviteForm" class="admin-form">
+                    <div class="form-group">
+                        <label for="inviteEmail">Email Address</label>
+                        <input type="email" id="inviteEmail" required placeholder="friend@example.com">
                     </div>
 
-                    <div class="system-stats">
-                        <div class="stat-item">
-                            <span class="stat-label">Your Role:</span>
-                            <span class="stat-value" id="userRole">Loading...</span>
+                    <div class="form-group">
+                        <label for="inviteMessage">Personal Message (Optional)</label>
+                        <textarea id="inviteMessage" rows="3" placeholder="Come join our family's electricity tracking..."></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="primary-btn">Send Invitation</button>
+                        <button type="button" id="cancelEmailInvite" class="secondary-btn">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Family Members Section -->
+        <div class="admin-section" id="familyMembersSection" style="display: none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h3>Family Members</h3>
+                    <button id="refreshMembersBtn" class="secondary-btn">🔄 Refresh</button>
+                </div>
+
+                <div id="familyMembersList" class="members-list">
+                    <!-- Family members will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- User Details Modal - Super Admin Only -->
+        <div id="userDetailsModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>User Details</h3>
+                    <button id="closeUserModal" class="close-btn">&times;</button>
+                </div>
+                <div id="userDetailsContent" class="modal-body">
+                    <!-- User details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button id="resetUserPasswordBtn" class="danger-btn">🔓 Reset Password</button>
+                    <button id="closeUserModal2" class="secondary-btn">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Stats Section -->
+        <div class="admin-section">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>⚡ Quick Electricity Statistics</h2>
+                    <button id="refreshQuickStatsBtn" class="secondary-btn">🔄 Refresh</button>
+                </div>
+
+                <div id="quickStatsGrid" class="overview-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="quickTotalSpent">Loading...</div>
+                        <div class="stat-label">Total Platform Spending</div>
+                        <div class="loading-overlay" id="quickSpentLoader">
+                            <div class="loading-spinner"></div>
                         </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Family Name:</span>
-                            <span class="stat-value" id="familyName">Loading...</span>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="quickTotalKwh">Loading...</div>
+                        <div class="stat-label">Total kWh Purchased</div>
+                        <div class="loading-overlay" id="quickKwhLoader">
+                            <div class="loading-spinner"></div>
                         </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Member Count:</span>
-                            <span class="stat-value" id="memberCount">Loading...</span>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="quickAvgCost">Loading...</div>
+                        <div class="stat-label">Average Cost per kWh</div>
+                        <div class="loading-overlay" id="quickCostLoader">
+                            <div class="loading-spinner"></div>
                         </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="quickActiveUsers">Loading...</div>
+                        <div class="stat-label">Active Users This Month</div>
+                        <div class="loading-overlay" id="quickUsersLoader">
+                            <div class="loading-spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="system-stats" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                    <div class="stat-item">
+                        <span class="stat-label">Your Role:</span>
+                        <span class="stat-value" id="userRole">Loading...</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Access Level:</span>
+                        <span class="stat-value" id="accountType">Loading...</span>
+                    </div>
+                    <div id="familyInfo" class="stat-item">
+                        <span class="stat-label">Family Name:</span>
+                        <span class="stat-value" id="familyName">Loading...</span>
                     </div>
                 </div>
             </div>
@@ -134,100 +405,430 @@
     <script src="/js/theme-effects.js"></script>
     <script>
         const ET = window.ElectricityTracker;
+        let currentUserRole = null;
 
         // Check authentication and admin access
         if (!ET.auth.checkAuth()) {
             // User will be redirected to login
         } else {
-            loadSystemInfo();
+            loadUserProfile();
         }
 
-        // Load system information
-        async function loadSystemInfo() {
+        // Load user profile and determine admin level
+        async function loadUserProfile() {
             try {
                 const response = await ET.api.get('/api/account/profile');
                 if (response?.tenant) {
+                    currentUserRole = response.tenant.role;
                     document.getElementById('userRole').textContent = response.tenant.role || 'Unknown';
-                    document.getElementById('familyName').textContent = response.tenant.name || 'Unknown';
 
-                    // Check if user is admin
-                    if (response.tenant.role !== 'admin') {
-                        document.body.innerHTML = `
-                            <div style="display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center;">
-                                <div>
-                                    <h1>🚫 Access Denied</h1>
-                                    <p>Admin access required to view this page.</p>
-                                    <a href="/dashboard" class="primary-btn">Return to Dashboard</a>
-                                </div>
-                            </div>
-                        `;
+                    if (response.tenant.role === 'super_admin') {
+                        setupSuperAdminDashboard();
+                        document.getElementById('adminSubtitle').textContent = 'System Administration Dashboard';
+                        document.getElementById('accountType').textContent = 'Super Administrator';
+                        document.getElementById('familyInfo').style.display = 'none';
+                    } else if (response.tenant.role === 'admin') {
+                        setupFamilyAdminDashboard();
+                        document.getElementById('adminSubtitle').textContent = 'Family Administration Dashboard';
+                        document.getElementById('accountType').textContent = 'Family Administrator';
+                        document.getElementById('familyName').textContent = response.tenant.name || 'Unknown';
+                    } else {
+                        showAccessDenied();
                         return;
                     }
+                } else {
+                    console.error('No tenant data in profile response:', response);
+                    showAccessDenied();
+                    return;
                 }
             } catch (error) {
-                console.error('Failed to load system info:', error);
-                ET.utils.showMessage('Failed to load admin information', 'error');
+                console.error('Failed to load admin profile:', error);
+                ET.utils.showMessage('Failed to load admin profile: ' + error.message, 'error');
+                showAccessDenied();
             }
         }
 
-        // Generate invite code
-        document.getElementById('generateInviteBtn').addEventListener('click', async () => {
+        function setupSuperAdminDashboard() {
+            // Show super admin sections
+            document.getElementById('systemOverview').style.display = 'block';
+            document.getElementById('userManagement').style.display = 'block';
+            document.getElementById('tenantManagement').style.display = 'block';
+            document.getElementById('systemMaintenance').style.display = 'block';
+
+            // Load super admin data
+            loadSystemOverview();
+            loadQuickStats();
+            loadUsers();
+            loadTenants();
+
+            // Setup super admin event listeners
+            setupSuperAdminEventListeners();
+        }
+
+        function setupFamilyAdminDashboard() {
+            // Only show family management for regular admins
+            // Family management section is visible by default
+            loadQuickStats();
+            setupFamilyAdminEventListeners();
+        }
+
+        function showAccessDenied() {
+            document.querySelector('.admin-dashboard').innerHTML = `
+                <div style="text-align: center; padding: 50px;">
+                    <h1>🚫 Access Denied</h1>
+                    <p>Administrative access required to view this page.</p>
+                    <a href="/dashboard" class="primary-btn">Return to Dashboard</a>
+                </div>
+            `;
+        }
+
+        // Super Admin Functions
+        async function loadSystemOverview() {
             try {
-                const result = await ET.api.post('/api/invites/generate');
-                if (result?.code) {
-                    document.getElementById('inviteResult').innerHTML = `
-                        <div class="success-message">
-                            <h4>✅ Invite Code Generated</h4>
-                            <p><strong>Code:</strong> <code>${result.code}</code></p>
-                            <p><strong>Expires:</strong> ${new Date(result.expiresAt).toLocaleDateString()}</p>
-                            <p>Share this code with family members to join your group.</p>
+                const data = await ET.api.get('/api/admin/system/overview');
+                if (data.success) {
+                    displaySystemMetrics(data.data);
+                }
+            } catch (error) {
+                console.error('Failed to load system overview:', error);
+            }
+        }
+
+        // Load Quick Statistics for both admin types
+        async function loadQuickStats() {
+            let loadingTimer;
+            try {
+                // Show loading spinners after 1 second if still loading
+                loadingTimer = setTimeout(() => {
+                    showQuickStatsLoading(true);
+                }, 1000);
+
+                const data = await ET.api.get('/api/admin/system/overview');
+
+                // Clear loading timer and hide spinners
+                if (loadingTimer) {
+                    clearTimeout(loadingTimer);
+                }
+                showQuickStatsLoading(false);
+
+                if (data && data.success) {
+                    displayQuickStats(data.data);
+                } else {
+                    throw new Error(data?.error || 'No data received');
+                }
+            } catch (error) {
+                console.error('Failed to load quick stats:', error);
+                ET.utils.showMessage('Failed to load admin statistics: ' + error.message, 'error');
+
+                // Clear loading timer and hide spinners on error
+                if (loadingTimer) {
+                    clearTimeout(loadingTimer);
+                }
+                showQuickStatsLoading(false);
+
+                // Show error in quick stats
+                document.getElementById('quickTotalSpent').textContent = 'Error';
+                document.getElementById('quickTotalKwh').textContent = 'Error';
+                document.getElementById('quickAvgCost').textContent = 'Error';
+                document.getElementById('quickActiveUsers').textContent = 'Error';
+            }
+        }
+
+        function showQuickStatsLoading(show) {
+            const loaders = [
+                'quickSpentLoader',
+                'quickKwhLoader',
+                'quickCostLoader',
+                'quickUsersLoader'
+            ];
+
+            loaders.forEach(loaderId => {
+                const loader = document.getElementById(loaderId);
+                if (loader) {
+                    if (show) {
+                        loader.classList.add('show');
+                    } else {
+                        loader.classList.remove('show');
+                    }
+                }
+            });
+        }
+
+        function displayQuickStats(data) {
+            // Calculate average cost per kWh
+            const avgCostPerKwh = data.totalKwhPurchased > 0 ?
+                data.totalMoneySpent / data.totalKwhPurchased : 0;
+
+            document.getElementById('quickTotalSpent').textContent =
+                `R${(data.totalMoneySpent || 0).toFixed(2)}`;
+            document.getElementById('quickTotalKwh').textContent =
+                `${(data.totalKwhPurchased || 0).toFixed(1)} kWh`;
+            document.getElementById('quickAvgCost').textContent =
+                `R${avgCostPerKwh.toFixed(2)}/kWh`;
+            document.getElementById('quickActiveUsers').textContent =
+                `${data.totalUsers || 0}`;
+        }
+
+        function displaySystemMetrics(data) {
+            const metricsContainer = document.getElementById('systemMetrics');
+            metricsContainer.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-title">Platform Users</div>
+                    <div class="metric-value">${data.totalUsers || 0}</div>
+                    <div class="metric-subtitle">Active user accounts</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Families</div>
+                    <div class="metric-value">${data.totalFamilies || 0}</div>
+                    <div class="metric-subtitle">Total family groups</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Total Spent</div>
+                    <div class="metric-value">R${(data.totalMoneySpent || 0).toFixed(2)}</div>
+                    <div class="metric-subtitle">${data.totalVouchers || 0} vouchers purchased</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">kWh Purchased</div>
+                    <div class="metric-value">${(data.totalKwhPurchased || 0).toFixed(1)} kWh</div>
+                    <div class="metric-subtitle">Avg R${(data.avgVoucherAmount || 0).toFixed(2)} per voucher</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Readings Taken</div>
+                    <div class="metric-value">${data.totalReadings || 0}</div>
+                    <div class="metric-subtitle">Electricity meter readings</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Recent Activity</div>
+                    <div class="metric-value">${data.recentActivityCount || 0}</div>
+                    <div class="metric-subtitle">Actions in last 30 days</div>
+                </div>
+            `;
+        }
+
+        async function loadUsers(page = 1, search = '') {
+            try {
+                const params = new URLSearchParams({ page: page.toString(), limit: '10' });
+                if (search) params.append('search', search);
+
+                const data = await ET.api.get(`/api/admin/users?${params}`);
+                if (data.success) {
+                    displayUsers(data.data.users);
+                    displayUsersPagination(data.data.pagination);
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        }
+
+        function displayUsers(users) {
+            const usersContainer = document.getElementById('usersList');
+            usersContainer.innerHTML = users.map(user => `
+                <div class="user-item" onclick="viewUserDetails(${user.id})">
+                    <div class="user-info">
+                        <strong>${user.email}</strong>
+                        <span class="user-role ${user.role || 'no-role'}">${user.role || 'No Role'}</span>
+                    </div>
+                    <div class="user-details">
+                        <small>Joined: ${new Date(user.created_at).toLocaleDateString()}</small>
+                        <span class="user-stats">${user.voucher_count} vouchers, ${user.reading_count} readings</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function viewUserDetails(userId) {
+            try {
+                const data = await ET.api.get(`/api/admin/users/${userId}`);
+                if (data.success) {
+                    const user = data.data.user;
+                    const activity = data.data.activity;
+
+                    document.getElementById('userDetailsContent').innerHTML = `
+                        <div class="user-details-info">
+                            <h4>${user.email}</h4>
+                            <p><strong>Role:</strong> ${user.role || 'No Role'}</p>
+                            <p><strong>Tenant:</strong> ${user.tenant_name || 'No Tenant'}</p>
+                            <p><strong>Joined:</strong> ${new Date(user.created_at).toLocaleDateString()}</p>
+                            <p><strong>Last Updated:</strong> ${new Date(user.updated_at).toLocaleDateString()}</p>
+                        </div>
+                        <div class="user-activity">
+                            <h5>Recent Activity</h5>
+                            <div class="activity-summary">
+                                <p>Vouchers: ${activity.vouchers.length}</p>
+                                <p>Readings: ${activity.readings.length}</p>
+                            </div>
                         </div>
                     `;
-                    document.getElementById('inviteResult').style.display = 'block';
+
+                    document.getElementById('userDetailsModal').style.display = 'block';
+                    window.currentUserId = userId;
                 }
             } catch (error) {
-                ET.utils.showMessage('Failed to generate invite code: ' + error.message, 'error');
+                console.error('Failed to load user details:', error);
             }
-        });
+        }
 
-        // Show email invitation form
-        document.getElementById('sendEmailInviteBtn').addEventListener('click', () => {
-            document.getElementById('emailInviteSection').style.display = 'block';
-            document.getElementById('inviteEmail').focus();
-        });
-
-        // Cancel email invite
-        document.getElementById('cancelEmailInvite').addEventListener('click', () => {
-            document.getElementById('emailInviteSection').style.display = 'none';
-            document.getElementById('emailInviteForm').reset();
-        });
-
-        // Send email invitation
-        document.getElementById('emailInviteForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const email = document.getElementById('inviteEmail').value;
-            const message = document.getElementById('inviteMessage').value;
-
+        async function loadTenants() {
             try {
-                const result = await ET.api.post('/api/family/invite', {
-                    email,
-                    message: message || undefined
-                });
-
-                if (result?.success) {
-                    ET.utils.showMessage('Invitation sent successfully! ✅');
-                    document.getElementById('emailInviteSection').style.display = 'none';
-                    document.getElementById('emailInviteForm').reset();
+                const data = await ET.api.get('/api/admin/tenants');
+                if (data.success) {
+                    displayTenants(data.data);
                 }
             } catch (error) {
-                ET.utils.showMessage('Failed to send invitation: ' + error.message, 'error');
+                console.error('Failed to load tenants:', error);
             }
-        });
+        }
 
-        // View family members
-        document.getElementById('viewFamilyBtn').addEventListener('click', loadFamilyMembers);
-        document.getElementById('refreshMembersBtn').addEventListener('click', loadFamilyMembers);
+        function displayTenants(tenants) {
+            const tenantsContainer = document.getElementById('tenantsList');
+            tenantsContainer.innerHTML = tenants.map(tenant => `
+                <div class="tenant-item">
+                    <div class="tenant-info">
+                        <strong>${tenant.name}</strong>
+                        <span class="tenant-members">${tenant.member_count} members</span>
+                    </div>
+                    <div class="tenant-stats">
+                        <span>R${tenant.total_spent.toFixed(2)} spent</span>
+                        <span>${tenant.voucher_count} vouchers</span>
+                        <span>${tenant.reading_count} readings</span>
+                    </div>
+                    <div class="tenant-date">
+                        <small>Created: ${new Date(tenant.created_at).toLocaleDateString()}</small>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function setupSuperAdminEventListeners() {
+            // System overview refresh
+            document.getElementById('refreshOverviewBtn').addEventListener('click', loadSystemOverview);
+
+            // Quick stats refresh
+            document.getElementById('refreshQuickStatsBtn').addEventListener('click', loadQuickStats);
+
+            // User management
+            document.getElementById('searchUsersBtn').addEventListener('click', () => {
+                const search = document.getElementById('userSearchInput').value;
+                loadUsers(1, search);
+            });
+
+            document.getElementById('exportUsersBtn').addEventListener('click', () => {
+                window.open('/api/admin/export/users', '_blank');
+            });
+
+            // Tenant management
+            document.getElementById('refreshTenantsBtn').addEventListener('click', loadTenants);
+
+            // System maintenance
+            document.getElementById('cleanupTokensBtn').addEventListener('click', () => performCleanup('expired_tokens'));
+            document.getElementById('cleanupInvitesBtn').addEventListener('click', () => performCleanup('expired_invites'));
+            document.getElementById('cleanupOrphanedBtn').addEventListener('click', () => performCleanup('orphaned_data'));
+
+            // User modal
+            document.getElementById('closeUserModal').addEventListener('click', () => {
+                document.getElementById('userDetailsModal').style.display = 'none';
+            });
+            document.getElementById('closeUserModal2').addEventListener('click', () => {
+                document.getElementById('userDetailsModal').style.display = 'none';
+            });
+
+            document.getElementById('resetUserPasswordBtn').addEventListener('click', async () => {
+                if (window.currentUserId && confirm('Are you sure you want to reset this user\\'s password?')) {
+                    const newPassword = prompt('Enter new password (minimum 6 characters):');
+                    if (newPassword && newPassword.length >= 6) {
+                        try {
+                            await ET.api.post(`/api/admin/users/${window.currentUserId}/reset-password`, {
+                                newPassword: newPassword
+                            });
+                            ET.utils.showMessage('Password reset successfully');
+                            document.getElementById('userDetailsModal').style.display = 'none';
+                        } catch (error) {
+                            ET.utils.showMessage('Failed to reset password: ' + error.message, 'error');
+                        }
+                    }
+                }
+            });
+        }
+
+        async function performCleanup(action) {
+            try {
+                const result = await ET.api.post('/api/admin/system/cleanup', { action });
+                if (result.success) {
+                    document.getElementById('maintenanceResults').innerHTML = `
+                        <div class="maintenance-success">
+                            ✅ ${result.data.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('maintenanceResults').innerHTML = `
+                    <div class="maintenance-error">
+                        ❌ Failed: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function setupFamilyAdminEventListeners() {
+            // Generate invite code
+            document.getElementById('generateInviteBtn').addEventListener('click', async () => {
+                try {
+                    const result = await ET.api.post('/api/invites/generate');
+                    if (result?.code) {
+                        document.getElementById('inviteResult').innerHTML = `
+                            <div class="success-message">
+                                <h4>✅ Invite Code Generated</h4>
+                                <p><strong>Code:</strong> <code>${result.code}</code></p>
+                                <p><strong>Expires:</strong> ${new Date(result.expiresAt).toLocaleDateString()}</p>
+                                <p>Share this code with family members to join your group.</p>
+                            </div>
+                        `;
+                        document.getElementById('inviteResult').style.display = 'block';
+                    }
+                } catch (error) {
+                    ET.utils.showMessage('Failed to generate invite code: ' + error.message, 'error');
+                }
+            });
+
+            // Show email invitation form
+            document.getElementById('sendEmailInviteBtn').addEventListener('click', () => {
+                document.getElementById('emailInviteSection').style.display = 'block';
+                document.getElementById('inviteEmail').focus();
+            });
+
+            // Cancel email invite
+            document.getElementById('cancelEmailInvite').addEventListener('click', () => {
+                document.getElementById('emailInviteSection').style.display = 'none';
+                document.getElementById('emailInviteForm').reset();
+            });
+
+            // Send email invitation
+            document.getElementById('emailInviteForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('inviteEmail').value;
+                const message = document.getElementById('inviteMessage').value;
+
+                try {
+                    const result = await ET.api.post('/api/family/invite', {
+                        email,
+                        message: message || undefined
+                    });
+
+                    if (result?.success) {
+                        ET.utils.showMessage('Invitation sent successfully! ✅');
+                        document.getElementById('emailInviteSection').style.display = 'none';
+                        document.getElementById('emailInviteForm').reset();
+                    }
+                } catch (error) {
+                    ET.utils.showMessage('Failed to send invitation: ' + error.message, 'error');
+                }
+            });
+
+            // View family members
+            document.getElementById('viewFamilyBtn').addEventListener('click', loadFamilyMembers);
+            document.getElementById('refreshMembersBtn').addEventListener('click', loadFamilyMembers);
+        }
 
         async function loadFamilyMembers() {
             try {
@@ -243,7 +844,7 @@
                             </div>
                             <div class="member-details">
                                 <small>Joined: ${new Date(member.joined_at).toLocaleDateString()}</small>
-                                ${member.role !== 'admin' ? `
+                                ${member.role !== 'admin' && member.role !== 'super_admin' ? `
                                     <button class="remove-member-btn" onclick="removeMember(${member.user_id}, '${member.email}')">
                                         🗑️ Remove
                                     </button>
@@ -251,8 +852,6 @@
                             </div>
                         </div>
                     `).join('');
-
-                    document.getElementById('memberCount').textContent = members.length;
                 } else {
                     membersList.innerHTML = '<p>No family members found.</p>';
                 }
@@ -277,6 +876,372 @@
                 ET.utils.showMessage('Failed to remove family member: ' + error.message, 'error');
             }
         };
+
+        // Load system information
+        async function loadSystemInfo() {
+            try {
+                const profileData = await ET.api.get('/api/account/profile');
+
+                if (profileData?.success) {
+                    // Update role information
+                    document.getElementById('userRole').textContent = profileData.tenant?.role || 'User';
+
+                    // Update account type
+                    const accountType = profileData.tenant?.role === 'super_admin' ? 'Super Administrator' :
+                                       profileData.tenant?.role === 'admin' ? 'Family Administrator' : 'Family Member';
+                    document.getElementById('accountType').textContent = accountType;
+
+                    // Update family name
+                    document.getElementById('familyName').textContent = profileData.tenant?.name || 'No Family';
+
+                    // Show/hide sections based on role
+                    const isSuper = profileData.tenant?.role === 'super_admin';
+                    const superAdminSections = document.querySelectorAll('.super-admin-only');
+                    superAdminSections.forEach(section => {
+                        section.style.display = isSuper ? 'block' : 'none';
+                    });
+
+                    // Load system overview data for super admins
+                    if (isSuper) {
+                        loadSystemOverview();
+                    }
+
+                    // Hide loading message
+                    const loadingMsg = document.querySelector('.loading-message');
+                    if (loadingMsg) loadingMsg.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load system info:', error);
+                ET.utils.showMessage('Failed to load system information', 'error');
+            }
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const ET = window.ElectricityTracker;
+
+            if (!ET) {
+                console.error('ElectricityTracker not found');
+                alert('Application failed to load. Please refresh the page.');
+                return;
+            }
+
+            // Check authentication
+            if (!ET.auth.checkAuth()) return;
+
+            // Load system information
+            loadSystemInfo();
+
+            // Add admin navigation
+            ET.addAdminNavigation();
+
+            // Set up super admin event listeners
+            setupSuperAdminHandlers();
+        });
+
+        // Set up super admin functionality
+        function setupSuperAdminHandlers() {
+            // System Overview
+            document.getElementById('loadUsersBtn')?.addEventListener('click', loadAllUsers);
+            document.getElementById('searchUsersBtn')?.addEventListener('click', showUserSearch);
+            document.getElementById('performUserSearchBtn')?.addEventListener('click', performUserSearch);
+            document.getElementById('refreshUsersBtn')?.addEventListener('click', () => loadAllUsers(true));
+
+            // Tenant Management
+            document.getElementById('loadTenantsBtn')?.addEventListener('click', loadAllTenants);
+            document.getElementById('tenantStatsBtn')?.addEventListener('click', loadTenantStats);
+            document.getElementById('refreshTenantsBtn')?.addEventListener('click', loadAllTenants);
+
+            // Maintenance
+            document.getElementById('cleanupTokensBtn')?.addEventListener('click', cleanupExpiredTokens);
+            document.getElementById('cleanupInvitesBtn')?.addEventListener('click', cleanupExpiredInvites);
+            document.getElementById('cleanupOrphanedBtn')?.addEventListener('click', cleanupOrphanedData);
+        }
+
+        // Load system overview data
+        async function loadSystemOverview() {
+            try {
+                const overview = await ET.api.get('/api/admin/system/overview');
+
+                if (overview?.success) {
+                    document.getElementById('totalUsers').textContent = overview.data.totalUsers || '0';
+                    document.getElementById('totalTenants').textContent = overview.data.totalTenants || '0';
+                    document.getElementById('totalReadings').textContent = overview.data.totalReadings || '0';
+                    document.getElementById('totalVouchers').textContent = overview.data.totalVouchers || '0';
+                }
+            } catch (error) {
+                console.error('Failed to load system overview:', error);
+                document.getElementById('totalUsers').textContent = 'Error';
+                document.getElementById('totalTenants').textContent = 'Error';
+                document.getElementById('totalReadings').textContent = 'Error';
+                document.getElementById('totalVouchers').textContent = 'Error';
+            }
+        }
+
+        // Simple cache for user data
+        let usersCache = {
+            data: null,
+            timestamp: 0,
+            CACHE_DURATION: 3 * 60 * 1000 // 3 minutes
+        };
+
+        // Load all users with caching
+        async function loadAllUsers(forceRefresh = false) {
+            try {
+                const now = Date.now();
+
+                // Use cache if available and not expired
+                if (!forceRefresh && usersCache.data && (now - usersCache.timestamp) < usersCache.CACHE_DURATION) {
+                    console.log('Using cached users data');
+                    displayCachedUsers();
+                    return;
+                }
+
+                // Fetch fresh data
+                const users = await ET.api.get('/api/admin/users');
+
+                if (users?.success) {
+                    // Cache the successful result
+                    usersCache.data = users;
+                    usersCache.timestamp = now;
+
+                    const usersList = document.getElementById('usersList');
+                    const usersCount = document.getElementById('usersCount');
+
+                    const dataLength = users.data?.users?.length || users.data?.length || 0;
+                    usersCount.textContent = `${dataLength} users found`;
+                    console.log(`Loaded ${dataLength} users (cached for 3 min)`);
+
+                    if (users.data.length > 0) {
+                        usersList.innerHTML = users.data.map(user => `
+                            <div class="user-item">
+                                <div class="user-info">
+                                    <strong>${user.email}</strong>
+                                    <span class="user-role ${user.role}">${user.role || 'member'}</span>
+                                </div>
+                                <div class="user-details">
+                                    <small>Created: ${new Date(user.created_at).toLocaleDateString()}</small>
+                                    <small>Tenant: ${user.tenant_name || 'No tenant'}</small>
+                                </div>
+                                <div class="user-actions">
+                                    <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
+                                    <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        usersList.innerHTML = '<p>No users found.</p>';
+                    }
+
+                    document.getElementById('usersListSection').style.display = 'block';
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to load users: ' + error.message, 'error');
+            }
+        }
+
+        // Show user search
+        function showUserSearch() {
+            const section = document.getElementById('userSearchSection');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            if (section.style.display === 'block') {
+                document.getElementById('userSearchInput').focus();
+            }
+        }
+
+        // Perform user search
+        async function performUserSearch() {
+            const query = document.getElementById('userSearchInput').value.trim();
+            if (!query) {
+                ET.utils.showMessage('Please enter a search term', 'error');
+                return;
+            }
+
+            try {
+                const users = await ET.api.get(`/api/admin/users?search=${encodeURIComponent(query)}`);
+
+                if (users?.success) {
+                    const usersList = document.getElementById('usersList');
+                    const usersCount = document.getElementById('usersCount');
+
+                    usersCount.textContent = `${users.data.length} users found`;
+
+                    if (users.data.length > 0) {
+                        usersList.innerHTML = users.data.map(user => `
+                            <div class="user-item">
+                                <div class="user-info">
+                                    <strong>${user.email}</strong>
+                                    <span class="user-role ${user.role}">${user.role || 'member'}</span>
+                                </div>
+                                <div class="user-details">
+                                    <small>Created: ${new Date(user.created_at).toLocaleDateString()}</small>
+                                    <small>Tenant: ${user.tenant_name || 'No tenant'}</small>
+                                </div>
+                                <div class="user-actions">
+                                    <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
+                                    <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        usersList.innerHTML = '<p>No users found matching your search.</p>';
+                    }
+
+                    document.getElementById('usersListSection').style.display = 'block';
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to search users: ' + error.message, 'error');
+            }
+        }
+
+        function displayCachedUsers() {
+            const users = usersCache.data;
+            if (!users?.success) return;
+
+            const usersList = document.getElementById('usersList');
+            const usersCount = document.getElementById('usersCount');
+
+            const dataLength = users.data?.users?.length || users.data?.length || 0;
+            usersCount.textContent = `${dataLength} users found (cached)`;
+
+            const userData = users.data?.users || users.data || [];
+            if (userData.length > 0) {
+                usersList.innerHTML = userData.map(user => `
+                    <div class="user-item">
+                        <div class="user-info">
+                            <strong>${user.email}</strong>
+                            <span class="user-role ${user.role}">${user.role || 'member'}</span>
+                        </div>
+                        <div class="user-details">
+                            <small>Created: ${new Date(user.created_at).toLocaleDateString()}</small>
+                            <small>Tenant: ${user.tenant_name || 'No tenant'}</small>
+                        </div>
+                        <div class="user-actions">
+                            <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
+                            <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                usersList.innerHTML = '<div class="no-data">No users found</div>';
+            }
+        }
+
+        // Load all tenants
+        async function loadAllTenants() {
+            try {
+                const tenants = await ET.api.get('/api/admin/tenants');
+
+                if (tenants?.success) {
+                    const tenantsList = document.getElementById('tenantsList');
+                    const tenantsCount = document.getElementById('tenantsCount');
+
+                    tenantsCount.textContent = `${tenants.data.length} families found`;
+
+                    if (tenants.data.length > 0) {
+                        tenantsList.innerHTML = tenants.data.map(tenant => `
+                            <div class="tenant-item">
+                                <div class="tenant-info">
+                                    <strong>${tenant.name}</strong>
+                                    <span class="tenant-status ${tenant.subscription_status}">${tenant.subscription_status}</span>
+                                </div>
+                                <div class="tenant-details">
+                                    <small>Created: ${new Date(tenant.created_at).toLocaleDateString()}</small>
+                                    <small>Members: ${tenant.member_count || 0}</small>
+                                    <small>Max Users: ${tenant.max_users || 5}</small>
+                                </div>
+                                <div class="tenant-actions">
+                                    <button onclick="viewTenantDetails(${tenant.id})" class="view-btn">👁️ View</button>
+                                    <button onclick="manageTenantUsers(${tenant.id})" class="manage-btn">👥 Manage Users</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        tenantsList.innerHTML = '<p>No families found.</p>';
+                    }
+
+                    document.getElementById('tenantsListSection').style.display = 'block';
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to load families: ' + error.message, 'error');
+            }
+        }
+
+        // Global functions for user/tenant management
+        window.viewUserDetails = function(userId) {
+            // Use the existing viewUserDetails function
+            viewUserDetails(userId);
+        };
+
+        window.resetUserPassword = async function(userId, email) {
+            if (!confirm(`Reset password for ${email}?`)) return;
+
+            const newPassword = prompt('Enter new password (minimum 6 characters):');
+            if (!newPassword || newPassword.length < 6) {
+                ET.utils.showMessage('Password must be at least 6 characters long', 'error');
+                return;
+            }
+
+            try {
+                const response = await ET.api.post(`/api/admin/users/${userId}/reset-password`, {
+                    newPassword: newPassword
+                });
+
+                if (response.success) {
+                    ET.utils.showMessage(response.message, 'success');
+                } else {
+                    ET.utils.showMessage(response.error || 'Password reset failed', 'error');
+                }
+            } catch (error) {
+                console.error('Password reset error:', error);
+                ET.utils.showMessage('Failed to reset password', 'error');
+            }
+        };
+
+        window.viewTenantDetails = function(tenantId) {
+            ET.utils.showMessage('Tenant details functionality coming soon', 'info');
+        };
+
+        window.manageTenantUsers = function(tenantId) {
+            ET.utils.showMessage('Tenant user management functionality coming soon', 'info');
+        };
+
+        // Maintenance functions
+        async function cleanupExpiredTokens() {
+            if (!confirm('Clean up expired password reset tokens?')) return;
+            try {
+                const result = await ET.api.post('/api/admin/maintenance/cleanup-tokens');
+                if (result?.success) {
+                    ET.utils.showMessage(`Cleaned up ${result.data.count} expired tokens`);
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to cleanup tokens: ' + error.message, 'error');
+            }
+        }
+
+        async function cleanupExpiredInvites() {
+            if (!confirm('Clean up expired invitation codes?')) return;
+            try {
+                const result = await ET.api.post('/api/admin/maintenance/cleanup-invites');
+                if (result?.success) {
+                    ET.utils.showMessage(`Cleaned up ${result.data.count} expired invites`);
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to cleanup invites: ' + error.message, 'error');
+            }
+        }
+
+        async function cleanupOrphanedData() {
+            if (!confirm('Clean up orphaned data? This may take a while.')) return;
+            try {
+                const result = await ET.api.post('/api/admin/maintenance/cleanup-orphaned');
+                if (result?.success) {
+                    ET.utils.showMessage(`Cleaned up orphaned data`);
+                }
+            } catch (error) {
+                ET.utils.showMessage('Failed to cleanup orphaned data: ' + error.message, 'error');
+            }
+        }
 
         // Hamburger menu functionality
         document.getElementById('hamburgerMenu').addEventListener('click', function() {
@@ -322,14 +1287,12 @@
             margin-bottom: 1.5rem;
             border-bottom: 1px solid var(--border);
             padding-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .card-header h2 {
-            margin: 0 0 0.5rem 0;
-            color: var(--foreground);
-        }
-
-        .card-header h3 {
+        .card-header h2, .card-header h3 {
             margin: 0 0 0.5rem 0;
             color: var(--foreground);
         }
@@ -340,12 +1303,6 @@
             font-size: 0.875rem;
         }
 
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
         .admin-actions {
             display: flex;
             gap: 1rem;
@@ -353,6 +1310,245 @@
             margin-bottom: 1.5rem;
         }
 
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--background);
+            color: var(--foreground);
+        }
+
+        /* System Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric-card {
+            background: var(--accent);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            text-align: center;
+        }
+
+        .metric-title {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--foreground);
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value.health-healthy {
+            color: #22c55e;
+        }
+
+        .metric-subtitle {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+
+        /* User Management */
+        .users-list {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .user-item {
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--background);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .user-item:hover {
+            background: var(--accent);
+        }
+
+        .user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-role {
+            padding: 0.25rem 0.75rem;
+            border-radius: calc(var(--radius) * 2);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .user-role.admin, .user-role.super_admin {
+            background: rgba(194, 125, 24, 0.1);
+            color: var(--primary);
+        }
+
+        .user-role.member {
+            background: var(--muted);
+            color: var(--muted-foreground);
+        }
+
+        .user-role.no-role {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        .user-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+        }
+
+        /* Tenant Management */
+        .tenants-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .tenant-item {
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--background);
+        }
+
+        .tenant-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .tenant-members {
+            background: var(--accent);
+            color: var(--accent-foreground);
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+        }
+
+        .tenant-stats {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+        }
+
+        /* System Maintenance */
+        .maintenance-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .maintenance-btn {
+            padding: 0.75rem 1rem;
+            background: var(--secondary);
+            color: var(--secondary-foreground);
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .maintenance-btn:hover {
+            opacity: 0.8;
+        }
+
+        .maintenance-results {
+            margin-top: 1rem;
+        }
+
+        .maintenance-success {
+            padding: 1rem;
+            background: rgba(34, 197, 94, 0.1);
+            color: #16a34a;
+            border-radius: var(--radius);
+        }
+
+        .maintenance-error {
+            padding: 1rem;
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            border-radius: var(--radius);
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 2rem;
+            min-width: 400px;
+            max-width: 90%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--muted-foreground);
+        }
+
+        .modal-footer {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .danger-btn {
+            background: var(--destructive);
+            color: var(--destructive-foreground);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+
+        /* Existing styles from original admin.html */
         .admin-form {
             max-width: 500px;
         }
@@ -434,7 +1630,7 @@
             text-transform: uppercase;
         }
 
-        .member-role.admin {
+        .member-role.admin, .member-role.super_admin {
             background: rgba(194, 125, 24, 0.1);
             color: var(--primary);
         }
@@ -476,16 +1672,278 @@
                 flex-direction: column;
             }
 
-            .member-info {
+            .member-info, .user-info {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
             }
 
-            .member-details {
+            .member-details, .user-details {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                min-width: 90%;
+                margin: 1rem;
+            }
+        }
+
+        /* Super Admin Dashboard Styles */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: var(--muted);
+            padding: 1.5rem;
+            border-radius: calc(var(--radius) * 2);
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .user-item, .tenant-item {
+            background: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) * 2);
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-info, .tenant-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-role, .tenant-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .user-role.super_admin, .tenant-status.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+        }
+
+        .user-role.admin {
+            background: rgba(59, 130, 246, 0.1);
+            color: #2563eb;
+        }
+
+        .user-role.member {
+            background: rgba(107, 114, 128, 0.1);
+            color: #4b5563;
+        }
+
+        .user-details, .tenant-details {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+        }
+
+        .user-actions, .tenant-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .view-btn, .reset-btn, .manage-btn {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--background);
+            color: var(--foreground);
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+
+        .view-btn:hover, .reset-btn:hover, .manage-btn:hover {
+            background: var(--muted);
+        }
+
+        .users-controls, .tenants-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .users-controls span, .tenants-controls span {
+            font-weight: 500;
+            color: var(--muted-foreground);
+        }
+
+        @media (max-width: 768px) {
+            .overview-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .user-actions, .tenant-actions {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .users-controls, .tenants-controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+
+        /* Mobile optimization and prevent sliding bug */
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: hidden !important;
+            position: relative !important;
+            max-width: 100vw !important;
+        }
+
+        body {
+            touch-action: manipulation !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* Prevent horizontal scrolling on all containers */
+        .page-container,
+        .admin-dashboard,
+        .admin-section,
+        .admin-card,
+        nav {
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }
+
+        /* Mobile input focus fix */
+        input, textarea, select {
+            max-width: 100% !important;
+            touch-action: manipulation !important;
+        }
+
+        /* Prevent viewport issues on mobile */
+        @media screen and (max-width: 768px) {
+            html {
+                -webkit-text-size-adjust: 100% !important;
+                -moz-text-size-adjust: 100% !important;
+                -ms-text-size-adjust: 100% !important;
+            }
+
+            body {
+                min-height: 100vh !important;
+                min-height: -webkit-fill-available !important;
+            }
+
+            /* Fix input zooming on iOS */
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="search"],
+            textarea,
+            select {
+                font-size: 16px !important;
+                transform: translateZ(0) !important;
+                -webkit-appearance: none !important;
+            }
+
+            /* Ensure admin sections are mobile friendly */
+            .admin-section {
+                margin: 10px !important;
+                padding: 0 !important;
+            }
+
+            .admin-card {
+                margin: 10px 0 !important;
+                padding: 15px !important;
+                border-radius: 8px !important;
+            }
+
+            /* Mobile navigation fixes */
+            .nav-links {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+
+            /* Form elements mobile optimization */
+            .form-group {
+                margin-bottom: 15px !important;
+            }
+
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+                border-radius: 6px !important;
+            }
+
+            /* Button mobile optimization */
+            .admin-actions {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+
+            .admin-actions button {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+            }
+
+            /* Grid layouts mobile fix */
+            .overview-grid,
+            .metrics-grid {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+
+            /* Modal mobile fixes */
+            .modal-content {
+                margin: 20px !important;
+                padding: 20px !important;
+                max-width: calc(100vw - 40px) !important;
+                max-height: calc(100vh - 40px) !important;
+                overflow-y: auto !important;
+            }
+        }
+
+        /* Landscape mobile fix */
+        @media screen and (max-width: 896px) and (orientation: landscape) {
+            body {
+                height: 100vh !important;
+                overflow-x: hidden !important;
             }
         }
     </style>
