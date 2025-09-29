@@ -210,51 +210,148 @@ const serveProtectedPage = (pageName) => {
         // Authentication successful - serve the protected HTML file with cache-busting headers
         console.log(`📄 Serving protected content: ${pageName}.html`);
 
-        // Serve from auth-required subdirectory using direct asset access
-        try {
-          console.log(`📂 Serving authenticated content: auth-required/${pageName}.html`);
+        // TEMPORARY FIX: Serve embedded admin content to bypass static content issues
+        if (pageName === 'admin') {
+          console.log(`📂 Serving embedded admin content (bypassing static content issues)`);
 
-          // Try to use __STATIC_CONTENT directly if available (Cloudflare Workers environment)
-          let htmlContent = null;
+          const adminHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - PowerMeter</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ PowerMeter - Admin</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
 
-          if (typeof __STATIC_CONTENT !== 'undefined' && __STATIC_CONTENT) {
+    <div class="page-container">
+        <div class="page-header">
+            <h1>🛡️ Admin Panel</h1>
+        </div>
+
+        <div class="admin-content">
+            <div class="section">
+                <h2>⚡ Quick Electricity Statistics</h2>
+                <div class="overview-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Platform Spending</div>
+                        <div class="stat-value" id="totalSpending">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Total kWh Purchased</div>
+                        <div class="stat-value" id="totalKwh">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Average Cost per kWh</div>
+                        <div class="stat-value" id="avgCost">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Active Users This Month</div>
+                        <div class="stat-value" id="activeUsers">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>👥 Family Management</h2>
+                <div class="admin-actions">
+                    <button class="primary-btn" onclick="generateInviteCode()">🔗 Generate Invite Code</button>
+                    <button class="primary-btn" onclick="viewFamilyMembers()">👪 View Family Members</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+
+        // Auth check
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
+        }
+
+        // Load admin stats
+        async function loadAdminStats() {
             try {
-              const assetPath = `auth-required/${pageName}.html`;
-              console.log(`📂 Attempting to read asset: ${assetPath}`);
-              htmlContent = await __STATIC_CONTENT.get(assetPath, 'text');
-            } catch (manifestError) {
-              console.log(`⚠️ Static content access failed: ${manifestError.message}`);
+                const response = await ET.api.get('/api/dashboard/admin');
+                if (response) {
+                    document.getElementById('totalSpending').textContent = 'R' + (response.totalSpending || 0).toFixed(2);
+                    document.getElementById('totalKwh').textContent = (response.totalKwhPurchased || 0).toFixed(1) + ' kWh';
+                    document.getElementById('avgCost').textContent = 'R' + (response.avgCostPerKwh || 0).toFixed(2);
+                    document.getElementById('activeUsers').textContent = response.activeUsersThisMonth || 0;
+                }
+            } catch (error) {
+                console.error('Failed to load admin stats:', error);
+                document.getElementById('totalSpending').textContent = 'Error';
+                document.getElementById('totalKwh').textContent = 'Error';
+                document.getElementById('avgCost').textContent = 'Error';
+                document.getElementById('activeUsers').textContent = 'Error';
             }
-          }
+        }
 
-          // If direct access failed, try serveStatic as fallback
-          if (!htmlContent) {
-            console.log(`🔄 Fallback: Using serveStatic for ${pageName}.html`);
-            const response = await serveStatic({ path: `./public/auth-required/${pageName}.html` })(c);
+        function generateInviteCode() {
+            alert('Invite code generation feature - to be implemented');
+        }
 
-            if (response) {
-              response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-              response.headers.set('Pragma', 'no-cache');
-              response.headers.set('Expires', '0');
-              response.headers.set('X-Auth-Required', 'true');
-              console.log(`✅ Successfully served protected content via serveStatic: ${pageName}.html`);
-            }
+        function viewFamilyMembers() {
+            alert('Family members view - to be implemented');
+        }
 
-            return response;
-          }
+        // Load stats on page load
+        loadAdminStats();
+    </script>
 
-          // Serve the HTML content directly
-          console.log(`✅ Successfully retrieved protected content: ${pageName}.html (${htmlContent.length} chars)`);
-          return c.html(htmlContent, 200, {
+    <style>
+        .admin-content { padding: 20px; }
+        .section { margin-bottom: 30px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-title { font-size: 14px; color: #666; margin-bottom: 10px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #333; }
+        .admin-actions { display: flex; gap: 15px; flex-wrap: wrap; }
+        .primary-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .primary-btn:hover { background: #0056b3; }
+    </style>
+</body>
+</html>
+          `;
+
+          console.log(`✅ Serving embedded admin HTML (${adminHtml.length} chars)`);
+          return c.html(adminHtml, 200, {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
             'X-Auth-Required': 'true'
           });
+        }
 
+        // For other pages, try to serve from public directory (fallback)
+        try {
+          console.log(`📂 Serving ${pageName} from public directory`);
+          const response = await serveStatic({ path: `./public/${pageName}.html` })(c);
+
+          if (response) {
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            response.headers.set('Pragma', 'no-cache');
+            response.headers.set('Expires', '0');
+            response.headers.set('X-Auth-Required', 'true');
+            console.log(`✅ Successfully served ${pageName}.html from public`);
+          }
+
+          return response;
         } catch (serveError) {
-          console.error(`🚨 Failed to serve protected content ${pageName}.html:`, serveError.message);
-          console.error(`🚨 Error stack:`, serveError.stack);
+          console.error(`🚨 Failed to serve ${pageName}.html:`, serveError.message);
           return c.text('Protected content temporarily unavailable', 503);
         }
 
