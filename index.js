@@ -903,111 +903,125 @@ app.delete('/api/vouchers/:id', async (c) => {
   }
 });
 
-// Dashboard endpoint (tenant-based or super admin aggregate)
+// Super Admin Dashboard - separate endpoint with platform-wide metrics
+app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+
+    // Get platform-wide voucher statistics
+    const voucherResult = await db.prepare(`
+      SELECT
+        COALESCE(SUM(rand_amount), 0) as total_amount,
+        COALESCE(SUM(kwh_amount), 0) as total_units,
+        COALESCE(SUM(vat_amount), 0) as total_vat,
+        COUNT(*) as total_vouchers
+      FROM readings
+      WHERE type = 'voucher'
+    `).first();
+
+    // Calculate average cost per kWh
+    const avgCostPerKwh = voucherResult.total_units > 0 ?
+      voucherResult.total_amount / voucherResult.total_units : 0;
+
+    // Get recent vouchers across all tenants
+    const recentVouchers = await db.prepare(`
+      SELECT r.*, t.name as tenant_name, u.email as user_email
+      FROM readings r
+      LEFT JOIN tenants t ON r.tenant_id = t.id
+      LEFT JOIN users u ON r.user_id = u.id
+      WHERE r.type = 'voucher'
+      ORDER BY r.purchase_date DESC
+      LIMIT 5
+    `).all();
+
+    // Get recent readings across all tenants
+    const recentReadings = await db.prepare(`
+      SELECT r.*, t.name as tenant_name, u.email as user_email
+      FROM readings r
+      LEFT JOIN tenants t ON r.tenant_id = t.id
+      LEFT JOIN users u ON r.user_id = u.id
+      WHERE r.type = 'reading'
+      ORDER BY r.reading_date DESC
+      LIMIT 5
+    `).all();
+
+    // Get monthly data for the last 6 months across all tenants
+    const monthlyData = await db.prepare(`
+      SELECT
+        strftime('%Y-%m', purchase_date) as month,
+        SUM(rand_amount) as amount,
+        SUM(kwh_amount) as kwh,
+        COUNT(*) as voucher_count
+      FROM readings
+      WHERE type = 'voucher'
+        AND purchase_date >= date('now', '-6 months')
+      GROUP BY strftime('%Y-%m', purchase_date)
+      ORDER BY month DESC
+    `).all();
+
+    // Get platform statistics
+    const platformStats = await db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM tenants) as total_families,
+        (SELECT COUNT(*) FROM readings WHERE type = 'reading') as total_readings,
+        (SELECT COUNT(*) FROM readings WHERE created_at >= date('now', '-30 days')) as recent_activity
+    `).first();
+
+    return c.json({
+      success: true,
+      type: 'super_admin_dashboard',
+      totalVouchers: voucherResult.total_vouchers || 0,
+      totalAmount: voucherResult.total_amount || 0,
+      totalUnits: voucherResult.total_units || 0,
+      totalVat: voucherResult.total_vat || 0,
+      avgCostPerKwh: avgCostPerKwh || 0,
+      totalUsers: platformStats.total_users || 0,
+      totalFamilies: platformStats.total_families || 0,
+      totalReadings: platformStats.total_readings || 0,
+      recentActivity: platformStats.recent_activity || 0,
+      recentVouchers: recentVouchers?.results || [],
+      recentReadings: recentReadings?.results || [],
+      monthlyData: monthlyData?.results || [],
+      lastUpdated: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Super admin dashboard error:', error);
+    return c.json({ error: 'Failed to fetch admin dashboard data' }, 500);
+  }
+});
+
+// Regular Dashboard endpoint (tenant-based only)
 app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
-    const isSuperAdmin = tenant?.role === 'super_admin';
-
-    if (isSuperAdmin) {
-      // Super admin sees aggregate data across ALL users/tenants
-      const voucherResult = await db.prepare(`
-        SELECT
-          COALESCE(SUM(rand_amount), 0) as total_amount,
-          COALESCE(SUM(kwh_amount), 0) as total_units,
-          COALESCE(SUM(vat_amount), 0) as total_vat,
-          COUNT(*) as total_vouchers
-        FROM readings
-        WHERE type = 'voucher'
-      `).first();
-
-      // Calculate average cost per kWh
-      const avgCostPerKwh = voucherResult.total_units > 0 ?
-        voucherResult.total_amount / voucherResult.total_units : 0;
-
-      // Get recent vouchers across all tenants
-      const recentVouchers = await db.prepare(`
-        SELECT r.*, t.name as tenant_name
-        FROM readings r
-        LEFT JOIN tenants t ON r.tenant_id = t.id
-        WHERE r.type = 'voucher'
-        ORDER BY r.purchase_date DESC
-        LIMIT 5
-      `).all();
-
-      // Get recent readings across all tenants
-      const recentReadings = await db.prepare(`
-        SELECT r.*, t.name as tenant_name
-        FROM readings r
-        LEFT JOIN tenants t ON r.tenant_id = t.id
-        WHERE r.type = 'reading'
-        ORDER BY r.reading_date DESC
-        LIMIT 5
-      `).all();
-
-      // Get monthly data for the last 6 months across all tenants
-      const monthlyData = await db.prepare(`
-        SELECT
-          strftime('%Y-%m', purchase_date) as month,
-          SUM(rand_amount) as amount,
-          SUM(kwh_amount) as kwh
-        FROM readings
-        WHERE type = 'voucher'
-          AND purchase_date >= date('now', '-6 months')
-        GROUP BY strftime('%Y-%m', purchase_date)
-        ORDER BY month DESC
-      `).all();
-
-      // Get total users and families for super admin overview
-      const platformStats = await db.prepare(`
-        SELECT
-          (SELECT COUNT(*) FROM users) as total_users,
-          (SELECT COUNT(*) FROM tenants) as total_families,
-          (SELECT COUNT(*) FROM readings WHERE type = 'reading') as total_readings
-      `).first();
-
+    // Regular tenant-scoped dashboard - super admins should use /api/dashboard/admin
+    // Handle case where user has no tenant
+    if (!tenant.id) {
       return c.json({
         success: true,
-        isSuperAdmin: true,
-        totalVouchers: voucherResult.total_vouchers || 0,
-        totalAmount: voucherResult.total_amount || 0,
-        totalUnits: voucherResult.total_units || 0,
-        totalVat: voucherResult.total_vat || 0,
-        avgCostPerKwh: avgCostPerKwh || 0,
-        totalUsers: platformStats.total_users || 0,
-        totalFamilies: platformStats.total_families || 0,
-        totalReadings: platformStats.total_readings || 0,
-        recentVouchers: recentVouchers?.results || [],
-        recentReadings: recentReadings?.results || [],
-        monthlyData: monthlyData?.results || [],
-        tenantName: 'Platform Overview',
-        userRole: tenant.role
+        totalVouchers: 0,
+        totalAmount: 0,
+        totalUnits: 0,
+        totalVat: 0,
+        avgCostPerKwh: 0,
+        recentVouchers: [],
+        recentReadings: [],
+        monthlyData: [],
+        tenantName: tenant.role === 'super_admin' ? 'Use Admin Dashboard' : 'No Family',
+        userRole: tenant.role,
+        message: tenant.role === 'super_admin' ?
+          'Super admins should use the admin dashboard for platform metrics' :
+          'No family data available'
       });
-    } else {
-      // Regular tenant-scoped dashboard with updated schema
-      // Handle case where super admin has no tenant
-      if (!tenant.id) {
-        return c.json({
-          success: true,
-          isSuperAdmin: false,
-          totalVouchers: 0,
-          totalAmount: 0,
-          totalUnits: 0,
-          totalVat: 0,
-          avgCostPerKwh: 0,
-          recentVouchers: [],
-          recentReadings: [],
-          monthlyData: [],
-          tenantName: 'No Family',
-          userRole: tenant.role,
-          message: 'No family data available'
-        });
-      }
+    }
 
-      const voucherResult = await db.prepare(`
+    // Process tenant-scoped dashboard data
+    const voucherResult = await db.prepare(`
         SELECT
           COALESCE(SUM(rand_amount), 0) as total_amount,
           COALESCE(SUM(kwh_amount), 0) as total_units,
@@ -1050,21 +1064,19 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
         ORDER BY month DESC
       `).bind(tenant.id).all();
 
-      return c.json({
-        success: true,
-        isSuperAdmin: false,
-        totalVouchers: voucherResult.total_vouchers || 0,
-        totalAmount: voucherResult.total_amount || 0,
-        totalUnits: voucherResult.total_units || 0,
-        totalVat: voucherResult.total_vat || 0,
-        avgCostPerKwh: avgCostPerKwh || 0,
-        recentVouchers: recentVouchers?.results || [],
-        recentReadings: recentReadings?.results || [],
-        monthlyData: monthlyData?.results || [],
-        tenantName: tenant.name,
-        userRole: tenant.role
-      });
-    }
+    return c.json({
+      success: true,
+      totalVouchers: voucherResult.total_vouchers || 0,
+      totalAmount: voucherResult.total_amount || 0,
+      totalUnits: voucherResult.total_units || 0,
+      totalVat: voucherResult.total_vat || 0,
+      avgCostPerKwh: avgCostPerKwh || 0,
+      recentVouchers: recentVouchers?.results || [],
+      recentReadings: recentReadings?.results || [],
+      monthlyData: monthlyData?.results || [],
+      tenantName: tenant.name,
+      userRole: tenant.role
+    });
 
   } catch (error) {
     console.error('Dashboard error:', error);
@@ -1371,14 +1383,34 @@ app.get('/api/account/profile', async (c) => {
         }
       });
     } else {
-      return c.json({
-        success: true,
-        user: {
-          id: user.userId,
-          email: user.email
-        },
-        tenant: null
-      });
+      // Check if user is a super admin without tenant association
+      const superAdminCheck = await db.prepare(`
+        SELECT role FROM users WHERE id = ? AND role = 'super_admin'
+      `).bind(user.userId).first();
+
+      if (superAdminCheck) {
+        return c.json({
+          success: true,
+          user: {
+            id: user.userId,
+            email: user.email
+          },
+          tenant: {
+            id: null,
+            name: 'System Admin',
+            role: 'super_admin'
+          }
+        });
+      } else {
+        return c.json({
+          success: true,
+          user: {
+            id: user.userId,
+            email: user.email
+          },
+          tenant: null
+        });
+      }
     }
   } catch (error) {
     console.error('Account profile error:', error);

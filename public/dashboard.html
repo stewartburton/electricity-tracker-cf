@@ -314,7 +314,12 @@
                     showStatsLoading(true);
                 }, 1000);
 
-                const data = await ET.api.get('/api/dashboard');
+                // Check if user is super admin and route to admin dashboard
+                const profile = await ET.api.get('/api/account/profile');
+                const isSuperAdmin = profile?.tenant?.role === 'super_admin';
+
+                const dashboardEndpoint = isSuperAdmin ? '/api/dashboard/admin' : '/api/dashboard';
+                const data = await ET.api.get(dashboardEndpoint);
 
                 // Clear loading timer and hide spinners
                 clearTimeout(loadingTimer);
@@ -322,7 +327,7 @@
                 
                 if (data && data.success !== false) {
                     // Handle super admin vs regular user view
-                    if (data.isSuperAdmin) {
+                    if (data.type === 'super_admin_dashboard' || isSuperAdmin) {
                         // Update title for super admin
                         document.querySelector('.dashboard-title').innerHTML = `
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
