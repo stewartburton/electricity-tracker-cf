@@ -205,8 +205,12 @@ const serveProtectedPage = (pageName) => {
         // Authentication successful - serve the protected HTML file with cache-busting headers
         console.log(`📄 Serving protected content: ${pageName}.html`);
 
+        // All protected pages now served from protected directory
+        const filePath = `./protected/${pageName}.html`;
+        console.log(`📂 Serving protected file from: ${filePath}`);
+
         // Create a response with the static file but add our cache-busting headers
-        const response = await serveStatic({ path: `./public/${pageName}.html` })(c);
+        const response = await serveStatic({ path: filePath })(c);
 
         // Add cache-busting headers to the response
         if (response) {

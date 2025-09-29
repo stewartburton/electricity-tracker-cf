@@ -12,6 +12,11 @@ routes = [
 [assets]
 directory = "./public"
 
+# Additional assets for protected content
+[[assets]]
+directory = "./protected"
+serve_single_page_app = false
+
 # Environment variables
 [vars]
 FROM_EMAIL = "noreply@powermeter.app"
