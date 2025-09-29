@@ -177,8 +177,10 @@ const serveProtectedPage = (pageName) => {
         // For admin pages, check role permissions
         if (pageName === 'admin') {
           console.log(`🔐 Checking admin permissions for user: ${decoded.userId}`);
+
+          // Check user's role in tenant_users table (no global role column exists)
           const user = await db.prepare(`
-            SELECT u.role, tu.role as tenant_role
+            SELECT tu.role as tenant_role, u.email
             FROM users u
             LEFT JOIN tenant_users tu ON u.id = tu.user_id
             WHERE u.id = ?
@@ -189,15 +191,18 @@ const serveProtectedPage = (pageName) => {
             return c.redirect('/login', 302);
           }
 
-          const hasAdminRole = ['admin', 'super_admin'].includes(user.role || user.tenant_role);
-          console.log(`👤 User roles: global=${user.role}, tenant=${user.tenant_role}, hasAdminRole=${hasAdminRole}`);
+          // Check if user is super admin (stewart@stewart-burton.com gets super admin access)
+          const isSuperAdmin = user.email === 'stewart@stewart-burton.com';
+          const hasAdminRole = ['admin', 'super_admin'].includes(user.tenant_role) || isSuperAdmin;
+
+          console.log(`👤 User: ${user.email}, tenant_role=${user.tenant_role}, isSuperAdmin=${isSuperAdmin}, hasAdminRole=${hasAdminRole}`);
 
           if (!hasAdminRole) {
-            console.log(`🚫 User ${decoded.userId} lacks admin privileges, redirecting to dashboard`);
+            console.log(`🚫 User ${decoded.userId} (${user.email}) lacks admin privileges, redirecting to dashboard`);
             return c.redirect('/dashboard', 302);
           }
 
-          console.log(`✅ Admin access GRANTED for user: ${decoded.userId}`);
+          console.log(`✅ Admin access GRANTED for user: ${decoded.userId} (${user.email})`);
         } else {
           console.log(`✅ Access granted to ${pageName} for user: ${decoded.userId}`);
         }
