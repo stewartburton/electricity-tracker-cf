@@ -132,37 +132,51 @@ app.get('/api/health', (c) => {
 const serveProtectedPage = (pageName) => {
   return async (c) => {
     try {
+      console.log(`🔒 SECURITY CHECK: Accessing protected page '${pageName}' from IP: ${c.req.header('CF-Connecting-IP')}`);
+      console.log(`🔒 User-Agent: ${c.req.header('User-Agent')}`);
+      console.log(`🔒 Request URL: ${c.req.url}`);
+
+      // CRITICAL: Add cache-busting headers
+      c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      c.header('Pragma', 'no-cache');
+      c.header('Expires', '0');
+
       // Get JWT token from httpOnly cookie
       const cookies = c.req.header('Cookie') || '';
+      console.log(`🔒 Cookies received: ${cookies}`);
       let token = null;
 
       // Parse token from auth_token cookie
       const tokenMatch = cookies.match(/auth_token=([^;]+)/);
       if (tokenMatch) {
         token = tokenMatch[1];
+        console.log(`🔒 Found auth_token cookie: ${token.substring(0, 20)}...`);
       }
 
       // Also check Authorization header as backup for API calls
       const authHeader = c.req.header('Authorization');
       if (!token && authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
+        console.log(`🔒 Found Authorization header token: ${token.substring(0, 20)}...`);
       }
 
       // No token found - immediately redirect to login
       if (!token) {
-        console.log('No auth token found, redirecting to login');
-        return c.redirect('/login');
+        console.log('🚨 SECURITY VIOLATION: No auth token found, redirecting to login');
+        console.log(`🚨 Request details - URL: ${c.req.url}, Method: ${c.req.method}, IP: ${c.req.header('CF-Connecting-IP')}`);
+        return c.redirect('/login', 302);
       }
 
       // Verify JWT token server-side
       try {
         const decoded = jwt.verify(token, c.env.JWT_SECRET);
-        console.log('Token verified for user:', decoded.userId);
+        console.log(`✅ Token verified for user: ${decoded.userId}`);
 
         const db = c.env.DB;
 
         // For admin pages, check role permissions
         if (pageName === 'admin') {
+          console.log(`🔐 Checking admin permissions for user: ${decoded.userId}`);
           const user = await db.prepare(`
             SELECT u.role, tu.role as tenant_role
             FROM users u
@@ -171,30 +185,48 @@ const serveProtectedPage = (pageName) => {
           `).bind(decoded.userId).first();
 
           if (!user) {
-            console.log('User not found, redirecting to login');
-            return c.redirect('/login');
+            console.log(`🚨 User ${decoded.userId} not found in database, redirecting to login`);
+            return c.redirect('/login', 302);
           }
 
           const hasAdminRole = ['admin', 'super_admin'].includes(user.role || user.tenant_role);
+          console.log(`👤 User roles: global=${user.role}, tenant=${user.tenant_role}, hasAdminRole=${hasAdminRole}`);
+
           if (!hasAdminRole) {
-            console.log('User lacks admin privileges, redirecting to dashboard');
-            return c.redirect('/dashboard');
+            console.log(`🚫 User ${decoded.userId} lacks admin privileges, redirecting to dashboard`);
+            return c.redirect('/dashboard', 302);
           }
 
-          console.log('Admin access granted for user:', decoded.userId);
+          console.log(`✅ Admin access GRANTED for user: ${decoded.userId}`);
+        } else {
+          console.log(`✅ Access granted to ${pageName} for user: ${decoded.userId}`);
         }
 
-        // Authentication successful - serve the protected HTML file directly
-        return serveStatic({ path: `./public/${pageName}.html` })(c);
+        // Authentication successful - serve the protected HTML file with cache-busting headers
+        console.log(`📄 Serving protected content: ${pageName}.html`);
+
+        // Create a response with the static file but add our cache-busting headers
+        const response = await serveStatic({ path: `./public/${pageName}.html` })(c);
+
+        // Add cache-busting headers to the response
+        if (response) {
+          response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+          response.headers.set('Pragma', 'no-cache');
+          response.headers.set('Expires', '0');
+          response.headers.set('X-Auth-Required', 'true');
+        }
+
+        return response;
 
       } catch (jwtError) {
-        console.error('JWT verification failed:', jwtError.message);
-        return c.redirect('/login');
+        console.error(`🚨 JWT verification failed: ${jwtError.message}`);
+        return c.redirect('/login', 302);
       }
 
     } catch (error) {
-      console.error('Server-side auth check failed:', error);
-      return c.redirect('/login');
+      console.error(`🚨 Server-side auth check failed: ${error.message}`);
+      console.error(`🚨 Stack: ${error.stack}`);
+      return c.redirect('/login', 302);
     }
   };
 };
@@ -3340,5 +3372,24 @@ app.get('/forgot-password', serveStatic({ path: './public/forgot-password.html' 
 app.get('/reset-password', serveStatic({ path: './public/reset-password.html' }));
 app.get('/register', serveStatic({ path: './public/register.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
+
+// SECURITY FALLBACK: Catch any attempts to access protected pages directly
+app.get('*', async (c) => {
+  const url = new URL(c.req.url);
+  const path = url.pathname;
+
+  console.log(`🔍 FALLBACK ROUTE HIT: ${path} from IP: ${c.req.header('CF-Connecting-IP')}`);
+
+  // If someone tries to access protected HTML files directly, redirect to login
+  const protectedPages = ['/admin.html', '/dashboard.html', '/history.html', '/voucher.html', '/reading.html', '/settings.html'];
+
+  if (protectedPages.includes(path)) {
+    console.log(`🚨 DIRECT ACCESS ATTEMPT to protected file: ${path} - BLOCKED`);
+    return c.redirect('/login', 302);
+  }
+
+  // For any other unmatched routes, return 404
+  return c.text('Not Found', 404);
+});
 
 export default app;
