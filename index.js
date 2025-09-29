@@ -487,7 +487,7 @@ app.post('/api/auth/login', async (c) => {
         name: tenantUser.name,
         role: tenantUser.role
       } : null,
-      redirectTo: tenantUser?.role === 'super_admin' ? '/admin.html' : '/dashboard.html'
+      redirectTo: tenantUser?.role === 'super_admin' ? '/admin' : '/dashboard'
     });
 
   } catch (error) {
