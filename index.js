@@ -2959,22 +2959,27 @@ const superAdminMiddleware = async (c, next) => {
 
     const db = c.env.DB;
 
-    // Check for super admin in tenant_users table first
-    const tenantAdminCheck = await db.prepare(`
-      SELECT tu.role FROM tenant_users tu
-      WHERE tu.user_id = ? AND tu.role = 'super_admin'
+    // Get user email and tenant role
+    const userCheck = await db.prepare(`
+      SELECT u.email, tu.role as tenant_role
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      WHERE u.id = ?
     `).bind(user.userId).first();
 
-    // If not found in tenant_users, check users table directly
-    const userAdminCheck = await db.prepare(`
-      SELECT role FROM users
-      WHERE id = ? AND role = 'super_admin'
-    `).bind(user.userId).first();
+    if (!userCheck) {
+      return c.json({ error: 'User not found' }, 404);
+    }
 
-    if (!tenantAdminCheck && !userAdminCheck) {
+    // Check if user is super admin (either hardcoded email or tenant role)
+    const isSuperAdmin = userCheck.email === 'stewart@stewart-burton.com';
+    const hasAdminRole = ['admin', 'super_admin'].includes(userCheck.tenant_role);
+
+    if (!isSuperAdmin && !hasAdminRole) {
       return c.json({ error: 'Super admin access required' }, 403);
     }
 
+    console.log(`✅ Super admin middleware passed for user: ${userCheck.email}`);
     await next();
   } catch (error) {
     console.error('Super admin middleware error:', error);
