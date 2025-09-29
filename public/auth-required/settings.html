@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Settings - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn active">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        <div class="page-header">
+            <h1>⚙️ Account Settings</h1>
+            <p class="page-subtitle">Manage your account and linked households</p>
+        </div>
+
+        <!-- Account Information -->
+        <div class="card" id="accountInfoCard">
+            <h2>👤 Account Information</h2>
+            <div id="accountInfoContent">
+                <div style="text-align: center; color: #666; padding: 20px;">
+                    Loading account information...
+                </div>
+            </div>
+        </div>
+
+        <!-- Password Change Section -->
+        <div class="card">
+            <h2>🔐 Change Password</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Update your account password for security.
+            </p>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label for="currentPassword">Current Password:</label>
+                    <input type="password" id="currentPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password:</label>
+                    <input type="password" id="newPassword" minlength="6" required>
+                    <small>Must be at least 6 characters long</small>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm New Password:</label>
+                    <input type="password" id="confirmPassword" minlength="6" required>
+                </div>
+                <button type="submit" class="primary-btn">🔐 Change Password</button>
+            </form>
+        </div>
+
+        <!-- Account Linking Section -->
+        <div class="card">
+            <h2>🏠 Household Account Linking</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Link your account with family members or housemates to share electricity data. 
+                Everyone in the household will see the same vouchers, readings, and statistics.
+            </p>
+
+            <div id="groupSection">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Create Group Section -->
+        <div class="card" id="createGroupSection" style="display: none;">
+            <h3>🆕 Create New Household Group</h3>
+            <form id="createGroupForm">
+                <div class="form-group">
+                    <label for="groupName">Group Name:</label>
+                    <input type="text" id="groupName" placeholder="e.g., Smith Family, Apartment 4B" required>
+                    <small>Enter a name for your household group</small>
+                </div>
+                <button type="submit" class="primary-btn">Create Group</button>
+            </form>
+        </div>
+
+        <!-- Join Group Section -->
+        <div class="card" id="joinGroupSection" style="display: none;">
+            <h3>🔗 Join Existing Group</h3>
+            <form id="joinGroupForm">
+                <div class="form-group">
+                    <label for="inviteCode">Invite Code:</label>
+                    <input type="text" id="inviteCode" placeholder="e.g., ABCD-EFGH-2024" required>
+                    <small>Enter the invite code shared by a group member</small>
+                </div>
+                <button type="submit" class="primary-btn">Join Group</button>
+            </form>
+        </div>
+
+        <!-- Email Invitations Section -->
+        <div class="card">
+            <h2>✉️ Email Invitations</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Invite people to PowerMeter via email. Send family invitations to join your household or new account invitations for referrals.
+            </p>
+
+            <!-- Send Invitation Forms -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;" class="invitation-forms-grid">
+                <div class="form-card" style="padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h3>👨‍👩‍👧‍👦 Family Invitation</h3>
+                    <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Invite someone to join your household group
+                    </p>
+                    <form id="sendFamilyInviteForm">
+                        <div class="form-group">
+                            <label for="familyEmail">Email Address:</label>
+                            <input type="email" id="familyEmail" placeholder="friend@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="familyMessage">Personal Message (optional):</label>
+                            <textarea id="familyMessage" placeholder="Hey! I'd love to share our electricity tracking with you..." rows="3"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="submit" class="primary-btn" style="flex: 1;">Send Family Invite</button>
+                            <button type="button" class="secondary-btn" onclick="generateFamilyLink()" style="flex: 1;">📱 Generate Link</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="form-card" style="padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h3>🌟 New Account Invitation</h3>
+                    <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Refer someone to create their own PowerMeter account
+                    </p>
+                    <form id="sendNewAccountInviteForm">
+                        <div class="form-group">
+                            <label for="newAccountEmail">Email Address:</label>
+                            <input type="email" id="newAccountEmail" placeholder="friend@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newAccountMessage">Personal Message (optional):</label>
+                            <textarea id="newAccountMessage" placeholder="I think you'd love PowerMeter for tracking your electricity usage..." rows="3"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="submit" class="primary-btn" style="flex: 1;">Send Referral Invite</button>
+                            <button type="button" class="secondary-btn" onclick="generateReferralLink()" style="flex: 1;">📱 Generate Link</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Sent Invitations List -->
+            <div style="border-top: 1px solid #e5e7eb; padding-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📬 Sent Invitations</h3>
+                    <button onclick="clearAllInvitations()"
+                            style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px;"
+                            title="Clear all sent invitations">
+                        🗑️ Clear All
+                    </button>
+                </div>
+                <div id="sentInvitationsList">
+                    <div style="text-align: center; color: #666; padding: 20px;">
+                        Loading sent invitations...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Group Management -->
+        <div class="card" id="groupManagementSection" style="display: none;">
+            <div id="groupManagementContent">
+                <!-- Content populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const ET = window.ElectricityTracker;
+            
+            if (!ET) {
+                alert('Application failed to load. Please refresh the page.');
+                throw new Error('Authentication required');
+            }
+
+            // CRITICAL SECURITY CHECK: Must be authenticated to access settings page
+            if (!ET || !ET.auth || !ET.auth.checkAuth()) throw new Error('Authentication required');
+
+            let accountData = null;
+
+            // Load account information
+            async function loadAccountInfo() {
+                try {
+                    const data = await ET.api.get('/api/account/info');
+                    if (data && data.success) {
+                        accountData = data.data;
+                        displayAccountInfo();
+                        displayGroupStatus();
+                    }
+                } catch (error) {
+                    console.error('Failed to load account info:', error);
+                    alert('Failed to load account information');
+                }
+            }
+
+            function displayAccountInfo() {
+                const content = document.getElementById('accountInfoContent');
+                content.innerHTML = `
+                    <div class="form-group">
+                        <label>Email Address:</label>
+                        <input type="email" value="${accountData.user.email}" readonly style="background: #f5f5f5;">
+                    </div>
+                    <div class="form-group">
+                        <label>Account Created:</label>
+                        <input type="text" value="${new Date(accountData.user.created_at).toLocaleDateString()}" readonly style="background: #f5f5f5;">
+                    </div>
+                `;
+            }
+
+            function displayGroupStatus() {
+                const groupSection = document.getElementById('groupSection');
+                const createSection = document.getElementById('createGroupSection');
+                const joinSection = document.getElementById('joinGroupSection');
+                const managementSection = document.getElementById('groupManagementSection');
+
+                if (accountData.group) {
+                    // User is in a group
+                    groupSection.innerHTML = `
+                        <div class="stat-card" style="border-left: 4px solid #28a745; margin-bottom: 20px;">
+                            <div class="stat-content">
+                                <h3>✅ Linked to: ${accountData.group.name}</h3>
+                                <p>Role: <strong>${accountData.group.role.charAt(0).toUpperCase() + accountData.group.role.slice(1)}</strong></p>
+                                <p>Joined: ${new Date(accountData.group.joined_at).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    `;
+
+                    // Show group management
+                    managementSection.style.display = 'block';
+                    displayGroupManagement();
+                    
+                    createSection.style.display = 'none';
+                    joinSection.style.display = 'none';
+                } else {
+                    // User is not in a group
+                    groupSection.innerHTML = `
+                        <div class="stat-card" style="border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                            <div class="stat-content">
+                                <h3>⚠️ No Household Group</h3>
+                                <p>You are not currently linked to any household group.</p>
+                                <p>Create a new group or join an existing one to share electricity data.</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button class="primary-btn" onclick="showCreateGroup()">🆕 Create Group</button>
+                            <button class="secondary-btn" onclick="showJoinGroup()">🔗 Join Group</button>
+                        </div>
+                    `;
+                    
+                    managementSection.style.display = 'none';
+                }
+            }
+
+            function displayGroupManagement() {
+                const content = document.getElementById('groupManagementContent');
+                let html = `
+                    <h3>👥 Group: ${accountData.group.name}</h3>
+                `;
+
+                if (accountData.group.role === 'owner') {
+                    html += `
+                        <div class="form-group">
+                            <label>Invite Code (Share this with family members):</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" value="${accountData.group.invite_code}" readonly style="background: #f0f8ff;" id="inviteCodeInput">
+                                <button type="button" class="secondary-btn" onclick="copyInviteCode()">📋 Copy</button>
+                            </div>
+                            <small>Share this code with family members so they can join your group</small>
+                        </div>
+                    `;
+                }
+
+                // Show linked accounts
+                if (accountData.linkedAccounts.length > 0) {
+                    html += `
+                        <h4>🔗 Linked Accounts:</h4>
+                        <div class="recent-list">
+                    `;
+                    accountData.linkedAccounts.forEach(account => {
+                        // Don't show remove button for current user or if current user isn't admin
+                        const isCurrentUser = account.user_id === accountData.user.id;
+                        const canRemove = accountData.user.role === 'admin' && !isCurrentUser;
+
+                        html += `
+                            <div class="recent-item">
+                                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                    <span>📧 ${account.email}</span>
+                                    ${isCurrentUser ? '<small style="color: #007bff; font-weight: bold;">(You)</small>' : ''}
+                                </div>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <small>${account.role.charAt(0).toUpperCase() + account.role.slice(1)}</small>
+                                    <small>${new Date(account.joined_at).toLocaleDateString()}</small>
+                                    ${canRemove ? `
+                                        <button onclick="removeFamilyMember('${account.user_id}', '${account.email}')"
+                                                style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; margin-left: 5px;"
+                                                title="Remove from family">
+                                            🗑️
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `
+                        <div class="stat-card" style="border-left: 4px solid #17a2b8;">
+                            <div class="stat-content">
+                                <h4>👤 Only You in Group</h4>
+                                <p>No other accounts are linked yet. Share your invite code to add family members.</p>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <button class="secondary-btn" onclick="leaveGroup()" style="background: #dc3545; color: white;">
+                            🚪 Leave Group
+                        </button>
+                    </div>
+                `;
+
+                content.innerHTML = html;
+            }
+
+            // Global functions
+            window.showCreateGroup = function() {
+                document.getElementById('createGroupSection').style.display = 'block';
+                document.getElementById('joinGroupSection').style.display = 'none';
+            };
+
+            window.showJoinGroup = function() {
+                document.getElementById('createGroupSection').style.display = 'none';
+                document.getElementById('joinGroupSection').style.display = 'block';
+            };
+
+            window.copyInviteCode = function() {
+                const input = document.getElementById('inviteCodeInput');
+                input.select();
+                document.execCommand('copy');
+                alert('Invite code copied to clipboard!');
+            };
+
+            window.leaveGroup = async function() {
+                if (confirm('Are you sure you want to leave this group? This action cannot be undone.')) {
+                    try {
+                        const data = await ET.api.post('/api/account/leave-group', {});
+                        if (data && data.success) {
+                            alert('Successfully left the group');
+                            loadAccountInfo(); // Reload
+                        }
+                    } catch (error) {
+                        console.error('Leave group error:', error);
+                        alert(error.message || 'Failed to leave group');
+                    }
+                }
+            };
+
+            // Form handlers
+            document.getElementById('createGroupForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('groupName').value;
+
+                try {
+                    const data = await ET.api.post('/api/account/create-group', { name });
+                    if (data && data.success) {
+                        alert('Group created successfully!');
+                        loadAccountInfo(); // Reload
+                    }
+                } catch (error) {
+                    console.error('Create group error:', error);
+                    alert(error.message || 'Failed to create group');
+                }
+            });
+
+            document.getElementById('joinGroupForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const inviteCode = document.getElementById('inviteCode').value;
+
+                try {
+                    const data = await ET.api.post('/api/account/join-group', { inviteCode });
+                    if (data && data.success) {
+                        alert(`Successfully joined "${data.data.name}"!`);
+                        loadAccountInfo(); // Reload
+                    }
+                } catch (error) {
+                    console.error('Join group error:', error);
+                    alert(error.message || 'Failed to join group');
+                }
+            });
+
+            // Password change form handler
+            document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                // Client-side validation
+                if (newPassword !== confirmPassword) {
+                    alert('New passwords do not match');
+                    throw new Error('Authentication required');
+                }
+
+                if (newPassword.length < 6) {
+                    alert('New password must be at least 6 characters long');
+                    throw new Error('Authentication required');
+                }
+
+                try {
+                    const data = await ET.api.post('/api/account/change-password', {
+                        currentPassword,
+                        newPassword
+                    });
+                    
+                    if (data && data.success) {
+                        alert('Password changed successfully!');
+                        // Clear the form
+                        document.getElementById('changePasswordForm').reset();
+                    }
+                } catch (error) {
+                    console.error('Change password error:', error);
+                    alert(error.message || 'Failed to change password');
+                }
+            });
+
+            // Email invitation functions
+            async function loadSentInvitations() {
+                try {
+                    const data = await ET.api.get('/api/invitations');
+                    if (data && data.success) {
+                        displaySentInvitations(data.data);
+                    }
+                } catch (error) {
+                    console.error('Failed to load sent invitations:', error);
+                    document.getElementById('sentInvitationsList').innerHTML = `
+                        <div style="text-align: center; color: #dc3545; padding: 20px;">
+                            Failed to load sent invitations
+                        </div>
+                    `;
+                }
+            }
+
+            function displaySentInvitations(invitations) {
+                const container = document.getElementById('sentInvitationsList');
+
+                if (!invitations || invitations.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #666; padding: 20px;">
+                            No invitations sent yet
+                        </div>
+                    `;
+                    throw new Error('Authentication required');
+                }
+
+                // Group invitations by recipient email and type
+                const groupedInvitations = {};
+                invitations.forEach(invitation => {
+                    const key = `${invitation.invitation_type}:${invitation.recipient_email}`;
+
+                    if (!groupedInvitations[key]) {
+                        groupedInvitations[key] = {
+                            ...invitation,
+                            count: 1,
+                            latestSentAt: invitation.sent_at
+                        };
+                    } else {
+                        groupedInvitations[key].count++;
+
+                        // Keep the most recent send date and best status
+                        if (new Date(invitation.sent_at) > new Date(groupedInvitations[key].latestSentAt)) {
+                            groupedInvitations[key].latestSentAt = invitation.sent_at;
+                        }
+
+                        // Update to better status if available (clicked > opened > sent)
+                        const statusPriority = { 'clicked': 3, 'opened': 2, 'sent': 1 };
+                        if (statusPriority[invitation.status] > statusPriority[groupedInvitations[key].status]) {
+                            groupedInvitations[key].status = invitation.status;
+                            groupedInvitations[key].opened_at = invitation.opened_at;
+                            groupedInvitations[key].clicked_at = invitation.clicked_at;
+                        }
+                    }
+                });
+
+                // Convert back to array and sort by latest send date
+                const groupedArray = Object.values(groupedInvitations)
+                    .sort((a, b) => new Date(b.latestSentAt) - new Date(a.latestSentAt));
+
+                let html = '<div class="recent-list">';
+                groupedArray.forEach(invitation => {
+                    const statusColor = invitation.status === 'sent' ? '#28a745' :
+                                      invitation.status === 'opened' ? '#ffc107' :
+                                      invitation.status === 'clicked' ? '#17a2b8' : '#6c757d';
+
+                    const typeLabel = invitation.invitation_type === 'family' ? '👨‍👩‍👧‍👦 Family' :
+                                      invitation.invitation_type === 'referral' ? '🌟 New Account' :
+                                      (invitation.invitation_type === 'new_account' && invitation.recipient_email === 'whatsapp-shareable-link') ? '📱 WhatsApp Link' :
+                                      invitation.invitation_type === 'new_account' ? '🌟 New Account' : '❓ Unknown';
+                    const countLabel = invitation.count > 1 ? ` <span style="color: #666; font-size: 14px;">x${invitation.count}</span>` : '';
+
+                    html += `
+                        <div class="recent-item" style="align-items: flex-start;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 5px;">
+                                    <span style="font-weight: 600;">${typeLabel}: ${invitation.recipient_email}${countLabel}</span>
+                                    <span style="color: ${statusColor}; font-size: 12px; padding: 2px 8px; background: ${statusColor}20; border-radius: 12px;">
+                                        ${invitation.status.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div style="font-size: 12px; color: #666;">
+                                    ${invitation.count > 1 ? 'Last sent' : 'Sent'}: ${new Date(invitation.latestSentAt).toLocaleDateString()}
+                                    ${invitation.opened_at ? ` • Opened: ${new Date(invitation.opened_at).toLocaleDateString()}` : ''}
+                                    ${invitation.clicked_at ? ` • Clicked: ${new Date(invitation.clicked_at).toLocaleDateString()}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+
+                container.innerHTML = html;
+            }
+
+            // Clear all sent invitations
+            window.clearAllInvitations = async function() {
+                if (!confirm('Are you sure you want to clear all sent invitations? This action cannot be undone.')) {
+                    throw new Error('Authentication required');
+                }
+
+                try {
+                    const response = await fetch('/api/invitations/clear', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`Successfully cleared ${data.deletedCount} invitation records.`);
+                        // Reload the invitations list
+                        loadSentInvitations();
+                    } else {
+                        alert('Failed to clear invitations: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Clear invitations error:', error);
+                    alert(error.message || 'Failed to clear invitations');
+                }
+            };
+
+            // Family invitation form handler
+            document.getElementById('sendFamilyInviteForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('familyEmail').value;
+                const personalMessage = document.getElementById('familyMessage').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+
+                // Disable button and show loading
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Sending...';
+
+                try {
+                    const data = await ET.api.post('/api/invitations/family', {
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    });
+
+                    if (data && data.success) {
+                        alert('Family invitation sent successfully!');
+                        document.getElementById('sendFamilyInviteForm').reset();
+                        loadSentInvitations(); // Refresh the list
+                    }
+                } catch (error) {
+                    console.error('Send family invitation error:', error);
+
+                    // Handle testing mode limitation with helpful message
+                    const errorMessage = error.message || 'Failed to send family invitation';
+                    if (errorMessage.includes('Resend is in testing mode')) {
+                        const helpfulMessage = `${errorMessage}\n\n💡 For testing: Try sending the invitation to stewart.burton84@gmail.com instead, or contact support to verify your domain for production use.`;
+                        alert(helpfulMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Send Family Invite';
+                }
+            });
+
+            // New account invitation form handler
+            document.getElementById('sendNewAccountInviteForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('newAccountEmail').value;
+                const personalMessage = document.getElementById('newAccountMessage').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+
+                // Disable button and show loading
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Sending...';
+
+                try {
+                    const data = await ET.api.post('/api/invitations/new-account', {
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    });
+
+                    if (data && data.success) {
+                        alert('Referral invitation sent successfully!');
+                        document.getElementById('sendNewAccountInviteForm').reset();
+                        loadSentInvitations(); // Refresh the list
+                    }
+                } catch (error) {
+                    console.error('Send new account invitation error:', error);
+
+                    // Handle testing mode limitation with helpful message
+                    const errorMessage = error.message || 'Failed to send referral invitation';
+                    if (errorMessage.includes('Resend is in testing mode')) {
+                        const helpfulMessage = `${errorMessage}\n\n💡 For testing: Try sending the invitation to stewart.burton84@gmail.com instead, or contact support to verify your domain for production use.`;
+                        alert(helpfulMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Send Referral Invite';
+                }
+            });
+
+            // Load initial data
+            loadAccountInfo();
+            loadSentInvitations();
+            
+            // Hamburger menu functionality
+            document.getElementById('hamburgerMenu').addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+                
+                navLinks.classList.toggle('active');
+                hamburgerMenu.classList.toggle('active');
+            });
+            
+            // Close menu when clicking nav links
+            document.querySelectorAll('.nav-btn').forEach(link => {
+                link.addEventListener('click', function() {
+                    const navLinks = document.getElementById('navLinks');
+                    const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+                    navLinks.classList.remove('active');
+                    hamburgerMenu.classList.remove('active');
+                });
+            });
+
+            // Remove family member
+            window.removeFamilyMember = async function(userId, email) {
+                if (!confirm(`Are you sure you want to remove ${email} from your family account? This action cannot be undone.`)) {
+                    throw new Error('Authentication required');
+                }
+
+                try {
+                    const response = await fetch('/api/family/remove-member', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: JSON.stringify({
+                            userId: userId
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`${email} has been removed from your family account.`);
+                        // Reload the account info to update the display
+                        loadAccountInfo();
+                    } else {
+                        alert('Failed to remove family member: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Remove family member error:', error);
+                    alert(error.message || 'Failed to remove family member');
+                }
+            };
+        });
+
+        // Generate family invitation link
+        async function generateFamilyLink() {
+            const email = document.getElementById('familyEmail').value || 'recipient@example.com';
+            const personalMessage = document.getElementById('familyMessage').value;
+
+            try {
+                // Check if ET is available
+                if (!window.ElectricityTracker) {
+                    alert('Application is still loading. Please try again in a moment.');
+                    throw new Error('Authentication required');
+                }
+
+                const response = await fetch('/api/invitations/generate-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data && data.success) {
+                    showInvitationModal(data.data, 'family');
+                } else {
+                    alert('Failed to generate invitation link: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Generate family link error:', error);
+                alert(error.message || 'Failed to generate invitation link');
+            }
+        }
+
+        // Generate referral invitation link
+        async function generateReferralLink() {
+            const email = document.getElementById('newAccountEmail').value || 'recipient@example.com';
+            const personalMessage = document.getElementById('newAccountMessage').value;
+
+            try {
+                // Check if ET is available
+                if (!window.ElectricityTracker) {
+                    alert('Application is still loading. Please try again in a moment.');
+                    throw new Error('Authentication required');
+                }
+
+                const response = await fetch('/api/invitations/generate-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        recipientEmail: email,
+                        personalMessage: personalMessage || undefined
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data && data.success) {
+                    showInvitationModal(data.data, 'referral');
+                } else {
+                    alert('Failed to generate invitation link: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Generate referral link error:', error);
+                alert(error.message || 'Failed to generate invitation link');
+            }
+        }
+
+        // Show invitation modal with links
+        function showInvitationModal(inviteData, type) {
+            const typeName = type === 'family' ? 'Family' : 'Referral';
+
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.5); z-index: 1000; display: flex;
+                align-items: center; justify-content: center;
+            `;
+
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+                    <h2>📱 ${typeName} Invitation Link Generated!</h2>
+
+                    <div style="margin: 20px 0;">
+                        <h3>🔗 Direct Link:</h3>
+                        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 14px;">
+                            ${inviteData.inviteUrl}
+                        </div>
+                        <button onclick="copyToClipboard('${inviteData.inviteUrl}')" style="margin-top: 10px; padding: 8px 16px; background: #c27d18; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📋 Copy Link
+                        </button>
+                    </div>
+
+                    <div style="margin: 20px 0;">
+                        <h3>💬 WhatsApp Message:</h3>
+                        <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; white-space: pre-line; font-size: 14px; max-height: 200px; overflow-y: auto;">
+${inviteData.message}
+                        </div>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button onclick="copyToClipboard(\`${inviteData.message.replace(/`/g, '\\`')}\`)" style="padding: 8px 16px; background: #25d366; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                📋 Copy Message
+                            </button>
+                            <a href="${inviteData.whatsappUrl}" target="_blank" style="padding: 8px 16px; background: #25d366; color: white; border: none; border-radius: 4px; text-decoration: none; display: inline-block;">
+                                📱 Open WhatsApp
+                            </a>
+                        </div>
+                    </div>
+
+                    <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <p><strong>Invitation Code:</strong> ${inviteData.inviteCode}</p>
+                        <p><strong>Expires:</strong> ${new Date(inviteData.expiresAt).toLocaleDateString()}</p>
+                    </div>
+
+                    <button onclick="this.parentElement.parentElement.remove()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+                        Close
+                    </button>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Close modal when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
+        // Copy to clipboard helper
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+</html>

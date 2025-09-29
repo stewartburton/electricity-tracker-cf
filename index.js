@@ -205,22 +205,24 @@ const serveProtectedPage = (pageName) => {
         // Authentication successful - serve the protected HTML file with cache-busting headers
         console.log(`📄 Serving protected content: ${pageName}.html`);
 
-        // All protected pages now served from protected directory
-        const filePath = `./protected/${pageName}.html`;
-        console.log(`📂 Serving protected file from: ${filePath}`);
+        // Serve from auth-required subdirectory (not directly accessible but included in assets)
+        try {
+          console.log(`📂 Serving authenticated content: auth-required/${pageName}.html`);
+          const response = await serveStatic({ path: `./public/auth-required/${pageName}.html` })(c);
 
-        // Create a response with the static file but add our cache-busting headers
-        const response = await serveStatic({ path: filePath })(c);
+          if (response) {
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            response.headers.set('Pragma', 'no-cache');
+            response.headers.set('Expires', '0');
+            response.headers.set('X-Auth-Required', 'true');
+            console.log(`✅ Successfully served protected content: ${pageName}.html`);
+          }
 
-        // Add cache-busting headers to the response
-        if (response) {
-          response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-          response.headers.set('Pragma', 'no-cache');
-          response.headers.set('Expires', '0');
-          response.headers.set('X-Auth-Required', 'true');
+          return response;
+        } catch (serveError) {
+          console.error(`🚨 Failed to serve protected content ${pageName}.html:`, serveError.message);
+          return c.text('Protected content temporarily unavailable', 503);
         }
-
-        return response;
 
       } catch (jwtError) {
         console.error(`🚨 JWT verification failed: ${jwtError.message}`);
@@ -3377,6 +3379,12 @@ app.get('/reset-password', serveStatic({ path: './public/reset-password.html' })
 app.get('/register', serveStatic({ path: './public/register.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
+// SECURITY: Block direct access to auth-required directory
+app.get('/auth-required/*', async (c) => {
+  console.log(`🚨 BLOCKED: Direct access attempt to auth-required directory from IP: ${c.req.header('CF-Connecting-IP')}`);
+  return c.redirect('/login', 302);
+});
+
 // SECURITY FALLBACK: Catch any attempts to access protected pages directly
 app.get('*', async (c) => {
   const url = new URL(c.req.url);
@@ -3386,9 +3394,10 @@ app.get('*', async (c) => {
 
   // If someone tries to access protected HTML files directly, redirect to login
   const protectedPages = ['/admin.html', '/dashboard.html', '/history.html', '/voucher.html', '/reading.html', '/settings.html'];
+  const protectedPaths = ['/auth-required/'];
 
-  if (protectedPages.includes(path)) {
-    console.log(`🚨 DIRECT ACCESS ATTEMPT to protected file: ${path} - BLOCKED`);
+  if (protectedPages.includes(path) || protectedPaths.some(p => path.startsWith(p))) {
+    console.log(`🚨 DIRECT ACCESS ATTEMPT to protected content: ${path} - BLOCKED`);
     return c.redirect('/login', 302);
   }
 

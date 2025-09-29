@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Voucher - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn active">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+    
+    <div class="page-container">
+        <div class="page-header">
+            <h1 class="voucher-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z" fill="currentColor"/>
+                    <path d="M6 8h8v2H6V8zm0 4h8v2H6v-2z" fill="currentColor"/>
+                </svg>
+                Add Voucher
+            </h1>
+        </div>
+        
+        <div class="voucher-form-container">
+            <div class="voucher-form">
+                <!-- SMS Parser Section -->
+                <div class="sms-import-section">
+                    <div class="section-header-inline">
+                        <h3>📧 📲 Quick SMS Import</h3>
+                        <button id="parseSmsBtn" class="parse-btn">⚡ Parse SMS</button>
+                    </div>
+                    <p>Paste your FNB electricity voucher SMS below to automatically fill the form</p>
+                    <textarea id="smsText" placeholder="FNB :-) Cape Town. Elec Amt: R43.48. Vat Amt: R6.52. Meter: 09000490491. Credit Token: 3752-3467-7715-5148-9439. Units: 14.9kWh." rows="4"></textarea>
+                </div>
+                
+                <!-- Manual Entry Form -->
+                <div class="voucher-details-section">
+                    <div class="section-header-inline">
+                        <h3>💳 📋 Voucher Details</h3>
+                    </div>
+                    
+                    <form id="voucherForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="amount">💰 Amount (Rand)</label>
+                                <input type="number" id="amount" name="amount" step="0.01" placeholder="0.00" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="vat">📊 VAT Amount (Rand)</label>
+                                <input type="number" id="vat" name="vat" step="0.01" placeholder="0.00">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="units">⚡ Units (kWh)</label>
+                            <input type="number" id="units" name="units" step="0.01" placeholder="0.00" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="token">🔑 Credit Token</label>
+                            <input type="text" id="token" name="token" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="purchase_date">🕒 Purchase Date & Time</label>
+                            <input type="datetime-local" id="purchase_date" name="purchase_date">
+                            <small>When was this voucher purchased?</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="notes">📝 Notes (optional)</label>
+                            <textarea id="notes" name="notes" rows="3" placeholder="e.g. Emergency top-up, Monthly purchase"></textarea>
+                        </div>
+                        
+                        <button type="submit" class="primary-btn">💾 Save Voucher</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+        
+        // CRITICAL SECURITY CHECK: Must be authenticated to access voucher page
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first');
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
+        }
+
+        setDefaultDateTime();
+        
+        // Set default date/time to now
+        function setDefaultDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('purchase_date').value = now.toISOString().slice(0, 16);
+        }
+        
+        // Parse SMS
+        document.getElementById('parseSmsBtn').addEventListener('click', async () => {
+            const smsText = document.getElementById('smsText').value;
+            
+            if (!smsText) {
+                ET.utils.showMessage('Please paste SMS text first', 'error');
+                return;
+            }
+            
+            try {
+                const result = await ET.api.post('/api/vouchers/parse-sms', { smsText });
+                
+                if (result && result.success) {
+                    // Fill form with parsed data
+                    if (result.amount) document.getElementById('amount').value = result.amount;
+                    if (result.vat) document.getElementById('vat').value = result.vat;
+                    if (result.units) document.getElementById('units').value = result.units;
+                    if (result.token) document.getElementById('token').value = result.token;
+                    if (result.note) document.getElementById('notes').value = result.note;
+                    
+                    ET.utils.showMessage('SMS parsed successfully! Review and save the details below.');
+                } else {
+                    ET.utils.showMessage('Could not parse SMS. Please enter details manually.', 'error');
+                }
+            } catch (error) {
+                ET.utils.showMessage('Error parsing SMS: ' + error.message, 'error');
+            }
+        });
+        
+        // Handle form submission
+        document.getElementById('voucherForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                amount: parseFloat(document.getElementById('amount').value),
+                vat: parseFloat(document.getElementById('vat').value) || 0,
+                units: parseFloat(document.getElementById('units').value),
+                token: document.getElementById('token').value,
+                purchase_date: document.getElementById('purchase_date').value,
+                notes: document.getElementById('notes').value
+            };
+            
+            try {
+                const result = await ET.api.post('/api/vouchers', formData);
+                
+                if (result) {
+                    ET.utils.showMessage('Voucher saved successfully! ✅');
+                    document.getElementById('voucherForm').reset();
+                    document.getElementById('smsText').value = '';
+                    setDefaultDateTime();
+                }
+            } catch (error) {
+                ET.utils.showMessage('Error saving voucher: ' + error.message, 'error');
+            }
+        });
+        
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+        
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+                
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
+        });
+        
+    </script>
+    
+    <style>
+        .sms-parser-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .divider {
+            text-align: center;
+            margin: 30px 0;
+            position: relative;
+        }
+        
+        .divider:before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #ddd;
+        }
+        
+        .divider span {
+            background: white;
+            padding: 0 20px;
+            position: relative;
+            color: #999;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .secondary-btn {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .secondary-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .voucher-item {
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .voucher-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .voucher-details {
+            display: flex;
+            gap: 15px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .voucher-notes {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            color: #777;
+            font-style: italic;
+        }
+    </style>
+</body>
+</html>

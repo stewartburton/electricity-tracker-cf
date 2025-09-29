@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .consumption-chart {
+            padding: 10px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .professional-chart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 15px;
+            width: 100%;
+            max-width: 100%;
+        }
+        .professional-chart svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .no-data-message {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: #999;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .no-data-message span {
+            font-size: 32px;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+        .legend-line {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+            margin-right: 8px;
+        }
+        .kwh-line {
+            background: #4CAF50;
+        }
+        .amount-line {
+            background: #2196F3;
+        }
+        .chart-legend {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .kwh-color {
+            background: #4CAF50;
+        }
+        .amount-color {
+            background: #2196F3;
+        }
+        .monthly-card.clickable {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .monthly-card.clickable:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Loading Spinner */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.show {
+            opacity: 1;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #18CCFC;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stats-grid .stat-card {
+            position: relative;
+        }
+
+        /* Mobile-friendly loading spinners */
+        @media (max-width: 768px) {
+            .loading-spinner {
+                width: 30px;
+                height: 30px;
+                border-width: 2px;
+            }
+
+            .loading-overlay {
+                background: rgba(255, 255, 255, 0.95);
+            }
+
+            .stats-grid {
+                gap: 15px;
+            }
+
+            .stat-card {
+                min-height: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Beams -->
+    <div class="background-beams">
+        <svg viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="beam1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#18CCFC;stop-opacity:0.8" />
+                    <stop offset="50%" style="stop-color:#6344F5;stop-opacity:0.4" />
+                    <stop offset="100%" style="stop-color:#AE48FF;stop-opacity:0.2" />
+                </linearGradient>
+                <linearGradient id="beam2" x1="100%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#AE48FF;stop-opacity:0.6" />
+                    <stop offset="50%" style="stop-color:#18CCFC;stop-opacity:0.3" />
+                    <stop offset="100%" style="stop-color:#6344F5;stop-opacity:0.1" />
+                </linearGradient>
+                <linearGradient id="beam3" x1="50%" y1="0%" x2="50%" y2="100%">
+                    <stop offset="0%" style="stop-color:#6344F5;stop-opacity:0.7" />
+                    <stop offset="50%" style="stop-color:#AE48FF;stop-opacity:0.5" />
+                    <stop offset="100%" style="stop-color:#18CCFC;stop-opacity:0.2" />
+                </linearGradient>
+            </defs>
+            <path class="beam-path beam-path-1" d="M0,200 Q250,100 500,300 T1000,150" stroke="url(#beam1)" stroke-width="2" fill="none" />
+            <path class="beam-path beam-path-2" d="M0,600 Q300,400 600,700 T1000,500" stroke="url(#beam2)" stroke-width="3" fill="none" />
+            <path class="beam-path beam-path-3" d="M200,0 Q400,250 600,200 Q800,150 1000,400" stroke="url(#beam3)" stroke-width="2" fill="none" />
+        </svg>
+    </div>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+    
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+                </svg>
+                Electricity Tracker Dashboard
+            </h1>
+            <p class="dashboard-subtitle">Track your electricity consumption and costs</p>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card comet-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <h3 id="totalAmount">R0.00</h3>
+                    <p>TOTAL SPENT</p>
+                </div>
+                <div class="loading-overlay" id="totalAmountLoader">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+            <div class="stat-card comet-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-content">
+                    <h3 id="totalUnits">0 kWh</h3>
+                    <p>TOTAL KWH</p>
+                </div>
+                <div class="loading-overlay" id="totalUnitsLoader">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+            <div class="stat-card comet-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3 id="avgCost">R0.00/kWh</h3>
+                    <p>AVG COST</p>
+                </div>
+                <div class="loading-overlay" id="avgCostLoader">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+            <div class="stat-card comet-card" id="fourthStatCard">
+                <div class="stat-icon">📋</div>
+                <div class="stat-content">
+                    <h3 id="totalVat">R0.00</h3>
+                    <p>TOTAL VAT</p>
+                </div>
+                <div class="loading-overlay" id="fourthStatLoader">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-sections">
+            <div class="section-header">
+                <h2>📅 Last 6 Months</h2>
+            </div>
+            
+            <div class="monthly-grid" id="monthlyGrid">
+                <div class="monthly-card">
+                    <h4>Loading...</h4>
+                    <h3>R0.00</h3>
+                    <p>0 kWh</p>
+                    <small>Calculating...</small>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <h2>📈 Usage Analytics</h2>
+            </div>
+            
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h4>Monthly Consumption</h4>
+                    <div id="consumptionChart" class="consumption-chart">
+                        <p>Loading consumption data...</p>
+                    </div>
+                </div>
+                <div class="analytics-card">
+                    <h4>📄 Recent Vouchers</h4>
+                    <div class="recent-list" id="recentVouchers">
+                        <div class="recent-item">
+                            <span>Loading...</span>
+                            <small>Loading...</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="analytics-card">
+                    <h4>📊 Recent Readings</h4>
+                    <div class="recent-list" id="recentReadings">
+                        <div class="recent-item">
+                            <span>Loading...</span>
+                            <small>Loading...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        // Use the ElectricityTracker namespace - no duplicate declarations
+        const ET = window.ElectricityTracker;
+        
+        // CRITICAL SECURITY CHECK: Must be authenticated to access dashboard
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first');
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
+        }
+
+        loadDashboard();
+        
+        async function loadDashboard() {
+            let loadingTimer;
+            try {
+                // Show loading spinners after 1 second if still loading
+                loadingTimer = setTimeout(() => {
+                    showStatsLoading(true);
+                }, 1000);
+
+                // Check if user is super admin and route to admin dashboard
+                const profile = await ET.api.get('/api/account/profile');
+                const isSuperAdmin = profile?.tenant?.role === 'super_admin';
+
+                const dashboardEndpoint = isSuperAdmin ? '/api/dashboard/admin' : '/api/dashboard';
+                const data = await ET.api.get(dashboardEndpoint);
+
+                // Clear loading timer and hide spinners
+                clearTimeout(loadingTimer);
+                showStatsLoading(false);
+                
+                if (data && data.success !== false) {
+                    // Handle super admin vs regular user view
+                    if (data.type === 'super_admin_dashboard' || isSuperAdmin) {
+                        // Update title for super admin
+                        document.querySelector('.dashboard-title').innerHTML = `
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+                            </svg>
+                            Platform Overview Dashboard
+                        `;
+                        document.querySelector('.dashboard-subtitle').textContent = 'Monitor electricity usage across all users';
+
+                        // Update stats for super admin
+                        document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
+                        document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
+                        document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
+
+                        // Show platform stats instead of VAT for super admin
+                        const fourthCard = document.getElementById('fourthStatCard');
+                        fourthCard.innerHTML = `
+                            <div class="stat-icon">👥</div>
+                            <div class="stat-content">
+                                <h3>${data.totalUsers || 0}</h3>
+                                <p>TOTAL USERS</p>
+                            </div>
+                        `;
+
+                        // Add an extra stat for families if we have the data
+                        if (data.totalFamilies !== undefined) {
+                            // Add after the existing stats
+                            const statsGrid = document.querySelector('.stats-grid');
+                            const familiesCard = document.createElement('div');
+                            familiesCard.className = 'stat-card comet-card';
+                            familiesCard.innerHTML = `
+                                <div class="stat-icon">🏠</div>
+                                <div class="stat-content">
+                                    <h3>${data.totalFamilies || 0}</h3>
+                                    <p>FAMILIES</p>
+                                </div>
+                            `;
+
+                            // Remove VAT card and add families card
+                            if (statsGrid.children.length === 4) {
+                                statsGrid.appendChild(familiesCard);
+                            }
+                        }
+                    } else {
+                        // Regular user view
+                        document.getElementById('totalAmount').textContent = ET.utils.formatCurrency(data.totalAmount);
+                        document.getElementById('totalUnits').textContent = `${(data.totalUnits || 0).toFixed(1)} kWh`;
+                        document.getElementById('avgCost').textContent = `${ET.utils.formatCurrency(data.avgCostPerKwh)}/kWh`;
+                        document.getElementById('totalVat').textContent = ET.utils.formatCurrency(data.totalVat);
+                    }
+                    
+                    // Display recent vouchers
+                    if (data.recentVouchers && data.recentVouchers.length > 0) {
+                        const vouchersHtml = data.recentVouchers.map(v => {
+                            const tenantInfo = data.isSuperAdmin && v.tenant_name ? ` (${v.tenant_name})` : '';
+                            return `
+                                <div class="recent-item">
+                                    <span>Voucher ${ET.utils.formatCurrency(v.rand_amount)} - ${v.kwh_amount} kWh${tenantInfo}</span>
+                                    <small>${ET.utils.formatDateTime(v.purchase_date)}</small>
+                                </div>
+                            `;
+                        }).join('');
+                        document.getElementById('recentVouchers').innerHTML = vouchersHtml;
+                    } else {
+                        document.getElementById('recentVouchers').innerHTML = '<div class="recent-item"><span>No vouchers yet</span></div>';
+                    }
+
+                    // Display recent readings
+                    if (data.recentReadings && data.recentReadings.length > 0) {
+                        const readingsHtml = data.recentReadings.map(r => {
+                            const tenantInfo = data.isSuperAdmin && r.tenant_name ? ` (${r.tenant_name})` : '';
+                            return `
+                                <div class="recent-item">
+                                    <span>Reading: ${r.reading_value} kWh${tenantInfo}</span>
+                                    <small>${ET.utils.formatDateTime(r.reading_date)}</small>
+                                </div>
+                            `;
+                        }).join('');
+                        document.getElementById('recentReadings').innerHTML = readingsHtml;
+                    } else {
+                        document.getElementById('recentReadings').innerHTML = '<div class="recent-item"><span>No readings yet</span></div>';
+                    }
+                    
+                    // Display monthly data
+                    if (data.monthlyData && data.monthlyData.length > 0) {
+                        const monthlyHtml = data.monthlyData.map(m => {
+                            const avgCost = m.kwh > 0 ? (m.amount / m.kwh) : 0;
+                            const monthName = new Date(m.month + '-01').toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short' 
+                            });
+                            return `
+                                <div class="monthly-card clickable" data-month="${m.month}">
+                                    <h4>${monthName}</h4>
+                                    <h3>${ET.utils.formatCurrency(m.amount)}</h3>
+                                    <p>${m.kwh.toFixed(1)} kWh</p>
+                                    <small>Avg ${ET.utils.formatCurrency(avgCost)}/kWh</small>
+                                </div>
+                            `;
+                        }).join('');
+                        document.getElementById('monthlyGrid').innerHTML = monthlyHtml;
+                        
+                        // Add click handlers for monthly cards
+                        document.querySelectorAll('.monthly-card.clickable').forEach(card => {
+                            card.addEventListener('click', () => {
+                                const month = card.getAttribute('data-month');
+                                window.location.href = `/history?month=${month}`;
+                            });
+                        });
+                    } else {
+                        document.getElementById('monthlyGrid').innerHTML = '<div class="monthly-card"><h4>No Data</h4><h3>R0.00</h3><p>0 kWh</p><small>No purchases yet</small></div>';
+                    }
+                    
+                    // Render consumption chart
+                    renderConsumptionChart(data.monthlyData || []);
+                }
+                
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                ET.utils.showMessage('Failed to load dashboard data', 'error');
+
+                // Clear loading timer and hide spinners on error
+                if (loadingTimer) {
+                    clearTimeout(loadingTimer);
+                }
+                showStatsLoading(false);
+            }
+        }
+
+        function showStatsLoading(show) {
+            const loaders = [
+                'totalAmountLoader',
+                'totalUnitsLoader',
+                'avgCostLoader',
+                'fourthStatLoader'
+            ];
+
+            loaders.forEach(loaderId => {
+                const loader = document.getElementById(loaderId);
+                if (loader) {
+                    if (show) {
+                        loader.classList.add('show');
+                    } else {
+                        loader.classList.remove('show');
+                    }
+                }
+            });
+        }
+        
+        function renderConsumptionChart(monthlyData) {
+            const chartContainer = document.getElementById('consumptionChart');
+            
+            if (!monthlyData || monthlyData.length === 0) {
+                chartContainer.innerHTML = '<div class="no-data-message"><span>📊</span><p>No consumption data available</p></div>';
+                return;
+            }
+            
+            // Sort data by month (oldest first for the chart)
+            const sortedData = monthlyData.sort((a, b) => a.month.localeCompare(b.month));
+            
+            // Find the max value for unified scaling - use the maximum of both data sets
+            const maxKwh = Math.max(...sortedData.map(m => m.kwh));
+            const maxAmount = Math.max(...sortedData.map(m => m.amount));
+            const maxValue = Math.max(maxKwh, maxAmount) * 1.1; // Single max value for both lines
+            
+            // Debug: log the values to verify math
+            console.log('Chart Debug:', {
+                maxKwh: maxKwh,
+                maxAmount: maxAmount, 
+                maxValue: maxValue,
+                sampleData: sortedData.map(d => ({ month: d.month, kwh: d.kwh, amount: d.amount }))
+            });
+            
+            // Chart dimensions - make it much larger to fill the container
+            const chartWidth = 600;
+            const chartHeight = 300;
+            const padding = { top: 30, right: 50, bottom: 60, left: 60 };
+            const innerWidth = chartWidth - padding.left - padding.right;
+            const innerHeight = chartHeight - padding.top - padding.bottom;
+            
+            // Generate smooth line paths
+            const createSmoothPath = (data, valueKey, maxValue) => {
+                const points = data.map((m, i) => ({
+                    x: padding.left + (i * innerWidth / Math.max(1, data.length - 1)),
+                    y: padding.top + innerHeight - (m[valueKey] / maxValue * innerHeight)
+                }));
+                
+                if (points.length < 2) return '';
+                
+                let path = `M ${points[0].x} ${points[0].y}`;
+                for (let i = 1; i < points.length; i++) {
+                    const prev = points[i - 1];
+                    const curr = points[i];
+                    const cp1x = prev.x + (curr.x - prev.x) * 0.3;
+                    const cp2x = curr.x - (curr.x - prev.x) * 0.3;
+                    path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`;
+                }
+                return path;
+            };
+            
+            const kwhPath = createSmoothPath(sortedData, 'kwh', maxValue);
+            const amountPath = createSmoothPath(sortedData, 'amount', maxValue);
+            
+            const chartHtml = `
+                <div class="professional-chart">
+                    <svg width="${chartWidth}" height="${chartHeight}" viewBox="0 0 ${chartWidth} ${chartHeight}">
+                        <!-- Background -->
+                        <rect width="${chartWidth}" height="${chartHeight}" fill="#fafafa" rx="8"/>
+                        
+                        <!-- Chart area -->
+                        <rect x="${padding.left}" y="${padding.top}" width="${innerWidth}" height="${innerHeight}" fill="white" stroke="#e0e0e0" stroke-width="1"/>
+                        
+                        <!-- Horizontal grid lines -->
+                        ${Array.from({length: 5}, (_, i) => {
+                            const y = padding.top + (i * innerHeight / 4);
+                            return `<line x1="${padding.left}" y1="${y}" x2="${padding.left + innerWidth}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>`;
+                        }).join('')}
+                        
+                        <!-- Vertical grid lines -->
+                        ${sortedData.map((_, i) => {
+                            const x = padding.left + (i * innerWidth / Math.max(1, sortedData.length - 1));
+                            return `<line x1="${x}" y1="${padding.top}" x2="${x}" y2="${padding.top + innerHeight}" stroke="#f8f8f8" stroke-width="1"/>`;
+                        }).join('')}
+                        
+                        
+                        <!-- Gradients -->
+                        <defs>
+                            <linearGradient id="kwhGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#4CAF50;stop-opacity:0" />
+                            </linearGradient>
+                            <linearGradient id="amountGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#2196F3;stop-opacity:0" />
+                            </linearGradient>
+                        </defs>
+                        
+                        <!-- Amount line -->
+                        <path d="${amountPath}" fill="none" stroke="#2196F3" stroke-width="4" stroke-linecap="round"/>
+                        
+                        <!-- kWh line -->
+                        <path d="${kwhPath}" fill="none" stroke="#4CAF50" stroke-width="4" stroke-linecap="round"/>
+                        
+                        <!-- Data points -->
+                        ${sortedData.map((m, i) => {
+                            const x = padding.left + (i * innerWidth / Math.max(1, sortedData.length - 1));
+                            const kwhY = padding.top + innerHeight - (m.kwh / maxValue * innerHeight);
+                            const amountY = padding.top + innerHeight - (m.amount / maxValue * innerHeight);
+                            return `
+                                <g class="data-point">
+                                    <circle cx="${x}" cy="${amountY}" r="4" fill="white" stroke="#2196F3" stroke-width="2"/>
+                                    <circle cx="${x}" cy="${kwhY}" r="4" fill="white" stroke="#4CAF50" stroke-width="2"/>
+                                    <circle cx="${x}" cy="${amountY}" r="2" fill="#2196F3"/>
+                                    <circle cx="${x}" cy="${kwhY}" r="2" fill="#4CAF50"/>
+                                </g>
+                            `;
+                        }).join('')}
+                        
+                        <!-- Month labels -->
+                        ${sortedData.map((m, i) => {
+                            const x = padding.left + (i * innerWidth / Math.max(1, sortedData.length - 1));
+                            const monthName = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'short' });
+                            return `<text x="${x}" y="${chartHeight - 10}" text-anchor="middle" fill="#666" font-size="11" font-family="Arial, sans-serif">${monthName}</text>`;
+                        }).join('')}
+                        
+                        <!-- Y-axis labels (unified scale) -->
+                        ${Array.from({length: 6}, (_, i) => {
+                            const y = padding.top + (i * innerHeight / 5);
+                            const value = ((5 - i) / 5 * maxValue).toFixed(0);
+                            return `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#666" font-size="10" font-family="Arial, sans-serif">${value}</text>`;
+                        }).join('')}
+                    </svg>
+                    
+                    <div class="chart-legend">
+                        <div class="legend-item">
+                            <div class="legend-line kwh-line"></div>
+                            <span>kWh Usage</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line amount-line"></div>
+                            <span>Amount Spent (R)</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            chartContainer.innerHTML = chartHtml;
+            
+            // Add tooltip functionality
+            addChartTooltips(sortedData, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxValue);
+            
+            // Add loading animation
+            animateChart();
+        }
+        
+        function addChartTooltips(data, chartWidth, chartHeight, padding, innerWidth, innerHeight, maxValue) {
+            const svg = document.querySelector('#consumptionChart svg');
+            if (!svg) return;
+            
+            // Create tooltip element
+            const tooltip = document.createElement('div');
+            tooltip.id = 'chartTooltip';
+            tooltip.style.cssText = `
+                position: absolute;
+                background: rgba(0,0,0,0.9);
+                color: white;
+                padding: 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                pointer-events: none;
+                opacity: 0;
+                transition: all 0.2s ease;
+                z-index: 1000;
+                white-space: nowrap;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            `;
+            document.body.appendChild(tooltip);
+            
+            // Add invisible hover areas for each data point
+            data.forEach((d, i) => {
+                const x = padding.left + (i * innerWidth / Math.max(1, data.length - 1));
+                const kwhY = padding.top + innerHeight - (d.kwh / maxValue * innerHeight);
+                const amountY = padding.top + innerHeight - (d.amount / maxValue * innerHeight);
+                const monthName = new Date(d.month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                
+                // Create hover areas for both data points
+                const kwhHover = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                kwhHover.setAttribute('cx', x);
+                kwhHover.setAttribute('cy', kwhY);
+                kwhHover.setAttribute('r', '15');
+                kwhHover.setAttribute('fill', 'transparent');
+                kwhHover.style.cursor = 'pointer';
+                
+                const amountHover = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                amountHover.setAttribute('cx', x);
+                amountHover.setAttribute('cy', amountY);
+                amountHover.setAttribute('r', '15');
+                amountHover.setAttribute('fill', 'transparent');
+                amountHover.style.cursor = 'pointer';
+                
+                // kWh hover events
+                kwhHover.addEventListener('mouseenter', (e) => {
+                    tooltip.innerHTML = `<strong>${monthName}</strong><br/>⚡ Usage: ${d.kwh.toFixed(1)} kWh`;
+                    tooltip.style.opacity = '1';
+                });
+                
+                kwhHover.addEventListener('mousemove', (e) => {
+                    const rect = svg.getBoundingClientRect();
+                    const chartContainer = document.getElementById('consumptionChart');
+                    const containerRect = chartContainer.getBoundingClientRect();
+                    
+                    // Calculate relative position within the chart
+                    let left = e.clientX - containerRect.left + 10;
+                    let top = e.clientY - containerRect.top - 10;
+                    
+                    // Keep tooltip within chart bounds
+                    const tooltipWidth = 200; // Approximate tooltip width
+                    const tooltipHeight = 50; // Approximate tooltip height
+                    
+                    if (left + tooltipWidth > containerRect.width) {
+                        left = e.clientX - containerRect.left - tooltipWidth - 10;
+                    }
+                    if (top < 0) {
+                        top = e.clientY - containerRect.top + 20;
+                    }
+                    if (top + tooltipHeight > containerRect.height) {
+                        top = e.clientY - containerRect.top - tooltipHeight - 10;
+                    }
+                    
+                    tooltip.style.left = (containerRect.left + left) + 'px';
+                    tooltip.style.top = (containerRect.top + top) + 'px';
+                });
+                
+                kwhHover.addEventListener('mouseleave', () => {
+                    tooltip.style.opacity = '0';
+                });
+                
+                // Amount hover events
+                amountHover.addEventListener('mouseenter', (e) => {
+                    tooltip.innerHTML = `<strong>${monthName}</strong><br/>💰 Spent: ${ET.utils.formatCurrency(d.amount)}`;
+                    tooltip.style.opacity = '1';
+                });
+                
+                amountHover.addEventListener('mousemove', (e) => {
+                    const rect = svg.getBoundingClientRect();
+                    const chartContainer = document.getElementById('consumptionChart');
+                    const containerRect = chartContainer.getBoundingClientRect();
+                    
+                    // Calculate relative position within the chart
+                    let left = e.clientX - containerRect.left + 10;
+                    let top = e.clientY - containerRect.top - 10;
+                    
+                    // Keep tooltip within chart bounds
+                    const tooltipWidth = 200; // Approximate tooltip width
+                    const tooltipHeight = 50; // Approximate tooltip height
+                    
+                    if (left + tooltipWidth > containerRect.width) {
+                        left = e.clientX - containerRect.left - tooltipWidth - 10;
+                    }
+                    if (top < 0) {
+                        top = e.clientY - containerRect.top + 20;
+                    }
+                    if (top + tooltipHeight > containerRect.height) {
+                        top = e.clientY - containerRect.top - tooltipHeight - 10;
+                    }
+                    
+                    tooltip.style.left = (containerRect.left + left) + 'px';
+                    tooltip.style.top = (containerRect.top + top) + 'px';
+                });
+                
+                amountHover.addEventListener('mouseleave', () => {
+                    tooltip.style.opacity = '0';
+                });
+                
+                svg.appendChild(kwhHover);
+                svg.appendChild(amountHover);
+            });
+        }
+        
+        function animateChart() {
+            const svg = document.querySelector('#consumptionChart svg');
+            if (!svg) return;
+            
+            // Find all path elements (lines)
+            const paths = svg.querySelectorAll('path[stroke]');
+            const dataPoints = svg.querySelectorAll('.data-point');
+            
+            paths.forEach((path, index) => {
+                if (path.getAttribute('stroke') === '#2196F3' || path.getAttribute('stroke') === '#4CAF50') {
+                    const pathLength = path.getTotalLength();
+                    path.style.strokeDasharray = pathLength;
+                    path.style.strokeDashoffset = pathLength;
+                    
+                    // Animate the line drawing
+                    path.style.transition = `stroke-dashoffset ${1 + index * 0.3}s ease-in-out`;
+                    setTimeout(() => {
+                        path.style.strokeDashoffset = '0';
+                    }, 200 + index * 200);
+                }
+            });
+            
+            // Animate data points
+            dataPoints.forEach((point, index) => {
+                point.style.opacity = '0';
+                point.style.transform = 'scale(0)';
+                point.style.transition = 'all 0.3s ease-out';
+                
+                setTimeout(() => {
+                    point.style.opacity = '1';
+                    point.style.transform = 'scale(1)';
+                }, 800 + index * 100);
+            });
+            
+            // Animate area fills
+            const areaFills = svg.querySelectorAll('path[fill*="Gradient"]');
+            areaFills.forEach((area, index) => {
+                area.style.opacity = '0';
+                area.style.transition = 'opacity 0.6s ease-out';
+                
+                setTimeout(() => {
+                    area.style.opacity = index === 0 ? '0.2' : '0.15';
+                }, 1200 + index * 200);
+            });
+        }
+        
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+        
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+                
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
+        });
+        
+        // Comet Card 3D Effect
+        function initCometCards() {
+            const cards = document.querySelectorAll('.comet-card');
+            
+            cards.forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    
+                    const rotateX = (y - centerY) / centerY * -17.5;
+                    const rotateY = (x - centerX) / centerX * 17.5;
+                    
+                    const translateX = (x - centerX) / centerX * 20;
+                    const translateY = (y - centerY) / centerY * -20;
+                    
+                    card.style.setProperty('--rotate-x', `${rotateX}deg`);
+                    card.style.setProperty('--rotate-y', `${rotateY}deg`);
+                    card.style.setProperty('--translate-x', `${translateX}px`);
+                    card.style.setProperty('--translate-y', `${translateY}px`);
+                    card.style.setProperty('--mouse-x', `${(x / rect.width) * 100}%`);
+                    card.style.setProperty('--mouse-y', `${(y / rect.height) * 100}%`);
+                });
+                
+                card.addEventListener('mouseleave', () => {
+                    card.style.setProperty('--rotate-x', '0deg');
+                    card.style.setProperty('--rotate-y', '0deg');
+                    card.style.setProperty('--translate-x', '0px');
+                    card.style.setProperty('--translate-y', '0px');
+                });
+            });
+        }
+        
+        // Initialize comet cards
+        initCometCards();
+    </script>
+</body>
+</html>

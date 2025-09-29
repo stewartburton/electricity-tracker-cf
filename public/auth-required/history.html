@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        /* Match the filters and summary styling to the main content */
+        .filters.card,
+        .stats-summary.card {
+            background: white !important;
+            color: #333 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+            padding: 25px !important;
+            margin: 20px auto !important;
+            max-width: 1200px !important;
+            border: none !important;
+        }
+        
+        .filters.card h2,
+        .stats-summary.card h2 {
+            color: #333 !important;
+            margin-bottom: 20px !important;
+            font-size: 1.5rem !important;
+            font-weight: 600 !important;
+        }
+        
+        .filter-group {
+            margin-bottom: 15px !important;
+        }
+        
+        .filter-group label {
+            color: #666 !important;
+            font-weight: 500 !important;
+            margin-bottom: 8px !important;
+            display: inline-block !important;
+        }
+        
+        .filter-group input,
+        .filter-group button {
+            margin-right: 10px !important;
+        }
+        
+        .stats-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+            gap: 20px !important;
+        }
+        
+        .stat-item {
+            background: #f8f9fa !important;
+            padding: 15px !important;
+            border-radius: 8px !important;
+            text-align: center !important;
+        }
+        
+        .stat-label {
+            color: #666 !important;
+            font-size: 0.9rem !important;
+            display: block !important;
+            margin-bottom: 5px !important;
+        }
+        
+        .stat-item span:last-child {
+            color: #333 !important;
+            font-size: 1.2rem !important;
+            font-weight: 600 !important;
+        }
+
+        /* Delete button styling */
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-delete:hover {
+            background-color: #c82333;
+        }
+
+        .btn-delete:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        /* Modal styling */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: #dc3545;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile responsiveness for delete buttons */
+        @media (max-width: 768px) {
+            .btn-delete {
+                padding: 6px 10px;
+                font-size: 10px;
+            }
+
+            .modal-content {
+                margin: 20px;
+            }
+        }
+
+        /* Admin history styles */
+        .admin-section {
+            margin: 20px auto;
+            max-width: 1200px;
+        }
+
+        .admin-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .card-header p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .user-selection {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .form-select, .form-input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .primary-btn, .secondary-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .primary-btn {
+            background: #007bff;
+            color: white;
+        }
+
+        .primary-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .secondary-btn {
+            background: #6c757d;
+            color: white;
+        }
+
+        .selected-user-info {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .selected-user-info h3 {
+            color: #333;
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+        }
+
+        .selected-user-info p {
+            color: #666;
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .view-only {
+            color: #6c757d;
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .user-selection {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .form-actions {
+                justify-content: stretch;
+            }
+
+            .primary-btn, .secondary-btn {
+                flex: 1;
+            }
+        }
+
+        /* Mobile optimization and prevent sliding bug */
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: hidden !important;
+            position: relative !important;
+            max-width: 100vw !important;
+        }
+
+        body {
+            touch-action: manipulation !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* Prevent horizontal scrolling on all containers */
+        .history-container,
+        .history-content,
+        .history-table-container,
+        .admin-section,
+        .admin-card,
+        nav {
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }
+
+        /* Mobile input focus fix */
+        input, textarea, select {
+            max-width: 100% !important;
+            touch-action: manipulation !important;
+        }
+
+        /* Prevent viewport issues on mobile */
+        @media screen and (max-width: 768px) {
+            html {
+                -webkit-text-size-adjust: 100% !important;
+                -moz-text-size-adjust: 100% !important;
+                -ms-text-size-adjust: 100% !important;
+            }
+
+            body {
+                min-height: 100vh !important;
+                min-height: -webkit-fill-available !important;
+            }
+
+            /* Fix input zooming on iOS */
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="search"],
+            input[type="month"],
+            textarea,
+            select {
+                font-size: 16px !important;
+                transform: translateZ(0) !important;
+                -webkit-appearance: none !important;
+            }
+
+            /* History container mobile fixes */
+            .history-container {
+                padding: 10px !important;
+                margin: 0 !important;
+            }
+
+            .history-header {
+                padding: 15px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .history-title {
+                font-size: 1.5rem !important;
+            }
+
+            /* Admin section mobile optimization */
+            .admin-section {
+                margin: 10px 0 !important;
+                padding: 0 !important;
+            }
+
+            .admin-card {
+                margin: 10px 0 !important;
+                padding: 15px !important;
+                border-radius: 8px !important;
+            }
+
+            /* History table mobile fixes */
+            .history-table-container {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                margin: 0 -10px !important;
+                padding: 0 10px !important;
+            }
+
+            .history-table {
+                min-width: 700px !important;
+                font-size: 14px !important;
+            }
+
+            .history-table th,
+            .history-table td {
+                padding: 8px 4px !important;
+                font-size: 12px !important;
+            }
+
+            /* Form elements mobile optimization */
+            .form-group {
+                margin-bottom: 15px !important;
+            }
+
+            .form-select, .form-input {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+                border-radius: 6px !important;
+            }
+
+            /* Button mobile optimization */
+            .primary-btn, .secondary-btn {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+                margin-bottom: 10px !important;
+            }
+
+            /* Tab buttons mobile fix */
+            .tab-buttons {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 5px !important;
+            }
+
+            .tab-btn {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 16px !important;
+            }
+
+            /* Mobile navigation fixes */
+            .nav-links {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+
+            /* Modal mobile fixes */
+            .modal-content {
+                margin: 20px !important;
+                padding: 20px !important;
+                max-width: calc(100vw - 40px) !important;
+                max-height: calc(100vh - 40px) !important;
+                overflow-y: auto !important;
+            }
+
+            /* User selection grid mobile fix */
+            .user-selection {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+
+            /* Selected user info mobile */
+            .selected-user-info {
+                padding: 12px !important;
+                margin-top: 12px !important;
+            }
+        }
+
+        /* Landscape mobile fix */
+        @media screen and (max-width: 896px) and (orientation: landscape) {
+            body {
+                height: 100vh !important;
+                overflow-x: hidden !important;
+            }
+
+            .history-container {
+                height: calc(100vh - 60px) !important;
+                overflow-y: auto !important;
+            }
+        }
+
+        /* Extra small devices fix */
+        @media screen and (max-width: 480px) {
+            .history-table {
+                min-width: 600px !important;
+            }
+
+            .history-table th,
+            .history-table td {
+                padding: 6px 2px !important;
+                font-size: 11px !important;
+            }
+
+            .admin-card {
+                padding: 12px !important;
+                margin: 8px 0 !important;
+            }
+
+            .card-header h2 {
+                font-size: 1.2rem !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn">📊 Add Reading</a>
+            <a href="/history" class="nav-btn active">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+    
+    <div class="history-container">
+        <div class="history-header">
+            <h1 class="history-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                    <path d="M3 3h2v2H3V3zm4 0h14v2H7V3zm-4 4h2v2H3V7zm4 0h14v2H7V7zm-4 4h2v2H3v-2zm4 0h14v2H7v-2zm-4 4h2v2H3v-2zm4 0h14v2H7v-2zm-4 4h2v2H3v-2zm4 0h14v2H7v-2z" fill="currentColor"/>
+                </svg>
+                Transaction History
+            </h1>
+        </div>
+
+        <!-- Admin User Selection - Super Admin Only -->
+        <div id="adminUserSelection" class="admin-section" style="display: none;">
+            <div class="admin-card">
+                <div class="card-header">
+                    <h2>👤 Select User</h2>
+                    <p>Choose a user to view their transaction history</p>
+                </div>
+                <div class="user-selection">
+                    <div class="form-group">
+                        <label for="userSelect">Select User:</label>
+                        <select id="userSelect" class="form-select">
+                            <option value="">Loading users...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="monthFilter">Filter by Month (optional):</label>
+                        <input type="month" id="monthFilter" class="form-input">
+                    </div>
+                    <div class="form-actions">
+                        <button id="loadUserHistoryBtn" class="primary-btn" disabled>📊 Load History</button>
+                        <button id="clearSelectionBtn" class="secondary-btn">🔄 Clear</button>
+                    </div>
+                </div>
+                <div id="selectedUserInfo" class="selected-user-info" style="display: none;">
+                    <h3 id="selectedUserEmail">Selected User</h3>
+                    <p id="selectedUserStats">Statistics will appear here</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="history-tabs">
+            <div class="tab-buttons">
+                <button class="tab-btn" data-tab="vouchers">💳 Vouchers</button>
+                <button class="tab-btn" data-tab="readings">📊 Readings</button>
+                <button class="tab-btn active" data-tab="combined">📋 All Combined</button>
+            </div>
+        </div>
+        
+        <div class="history-content">
+            <div class="history-table-header">
+                <h2>📋 All Transactions (Combined)</h2>
+                <p>Showing all 26 transactions in chronological order</p>
+            </div>
+            
+            <div class="history-table-container">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>DATE & TIME</th>
+                            <th>TYPE</th>
+                            <th>DETAILS</th>
+                            <th>AMOUNT/VALUE</th>
+                            <th>UNITS/USAGE</th>
+                            <th>NOTES</th>
+                            <th>ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <!-- Pre-allocate space to prevent layout shift -->
+                        <tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">Loading transactions...</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
+                        <tr style="height: 400px; visibility: hidden;"><td colspan="7">&nbsp;</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+        
+        <!-- Filters -->
+        <div class="filters card">
+            <div class="filter-group">
+                <label for="monthFilter">Filter by Month:</label>
+                <input type="month" id="monthFilter">
+                <button id="filterBtn" class="secondary-btn">Apply Filter</button>
+                <button id="clearFilterBtn" class="secondary-btn">Clear</button>
+            </div>
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" id="showVouchers" checked> Show Vouchers
+                </label>
+                <label>
+                    <input type="checkbox" id="showReadings" checked> Show Readings
+                </label>
+            </div>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats-summary card">
+            <h2>Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Total Vouchers:</span>
+                    <span id="totalVoucherCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Spent:</span>
+                    <span id="totalSpent">R0.00</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Units:</span>
+                    <span id="totalUnits">0 kWh</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Readings:</span>
+                    <span id="totalReadingCount">0</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p id="deleteConfirmText">Are you sure you want to delete this item?</p>
+            <div class="modal-actions">
+                <button id="cancelDelete" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDelete" class="btn btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Deleting...</p>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+        let allVouchers = [];
+        let allReadings = [];
+        
+        // CRITICAL SECURITY CHECK: Must be authenticated to access history
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first');
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
+        }
+
+        setupFilters();
+        loadTransactions();
+        
+        function setupFilters() {
+            // Check URL for month parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const monthParam = urlParams.get('month');
+            
+            if (monthParam) {
+                document.getElementById('monthFilter').value = monthParam;
+            } else {
+                // Don't set a default month filter - show all data
+                document.getElementById('monthFilter').value = '';
+            }
+            
+            // Filter button
+            document.getElementById('filterBtn').addEventListener('click', () => {
+                loadTransactions();
+            });
+            
+            // Clear filter
+            document.getElementById('clearFilterBtn').addEventListener('click', () => {
+                document.getElementById('monthFilter').value = '';
+                loadTransactions();
+            });
+            
+            // Checkboxes
+            document.getElementById('showVouchers').addEventListener('change', renderTransactions);
+            document.getElementById('showReadings').addEventListener('change', renderTransactions);
+            
+            // Tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    btn.classList.add('active');
+                    
+                    const tab = btn.getAttribute('data-tab');
+                    
+                    // Update checkboxes based on tab
+                    if (tab === 'vouchers') {
+                        document.getElementById('showVouchers').checked = true;
+                        document.getElementById('showReadings').checked = false;
+                    } else if (tab === 'readings') {
+                        document.getElementById('showVouchers').checked = false;
+                        document.getElementById('showReadings').checked = true;
+                    } else if (tab === 'combined') {
+                        document.getElementById('showVouchers').checked = true;
+                        document.getElementById('showReadings').checked = true;
+                    }
+                    
+                    // Update the table header based on selected tab
+                    updateTableHeader(tab);
+                    
+                    renderTransactions();
+                });
+            });
+        }
+        
+        async function loadTransactions() {
+            try {
+                const month = document.getElementById('monthFilter').value;
+                const endpoint = month ? `/api/transactions?month=${month}` : '/api/transactions';
+                
+                const data = await ET.api.get(endpoint);
+                
+                if (data) {
+                    allVouchers = data.vouchers || [];
+                    allReadings = data.readings || [];
+                    
+                    updateSummary();
+                    renderTransactions();
+                }
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+                const tableBody = document.getElementById('historyTableBody');
+                if (tableBody) {
+                    tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #e53e3e;">Error loading transactions</td></tr>';
+                }
+            }
+        }
+        
+        function updateSummary() {
+            const totalSpent = allVouchers.reduce((sum, v) => sum + (v.rand_amount || 0), 0);
+            const totalUnits = allVouchers.reduce((sum, v) => sum + (v.kwh_amount || 0), 0);
+            
+            document.getElementById('totalVoucherCount').textContent = allVouchers.length;
+            document.getElementById('totalSpent').textContent = ET.utils.formatCurrency(totalSpent);
+            document.getElementById('totalUnits').textContent = `${totalUnits.toFixed(2)} kWh`;
+            document.getElementById('totalReadingCount').textContent = allReadings.length;
+        }
+        
+        function updateTableHeader(activeTab) {
+            const headerTitle = document.querySelector('.history-table-header h2');
+            const headerSubtitle = document.querySelector('.history-table-header p');
+            
+            if (!headerTitle || !headerSubtitle) return;
+            
+            if (activeTab === 'vouchers') {
+                headerTitle.textContent = '💳 Vouchers Only';
+                headerSubtitle.textContent = `Showing voucher purchases in chronological order`;
+            } else if (activeTab === 'readings') {
+                headerTitle.textContent = '📊 Readings Only';
+                headerSubtitle.textContent = `Showing meter readings in chronological order`;
+            } else if (activeTab === 'combined') {
+                headerTitle.textContent = '📋 All Transactions (Combined)';
+                headerSubtitle.textContent = `Showing all transactions in chronological order`;
+            }
+        }
+        
+        function renderTransactions() {
+            const showVouchers = document.getElementById('showVouchers').checked;
+            const showReadings = document.getElementById('showReadings').checked;
+            
+            let transactions = [];
+            
+            // Add vouchers
+            if (showVouchers) {
+                transactions.push(...allVouchers.map(v => ({
+                    ...v,
+                    type: 'voucher',
+                    date: v.date,
+                    sortDate: new Date(v.date)
+                })));
+            }
+            
+            // Add readings
+            if (showReadings) {
+                transactions.push(...allReadings.map(r => ({
+                    ...r,
+                    type: 'reading',
+                    date: r.date,
+                    sortDate: new Date(r.date)
+                })));
+            }
+            
+            // Sort by date (newest first)
+            transactions.sort((a, b) => b.sortDate - a.sortDate);
+            
+            if (transactions.length === 0) {
+                // Show no transactions message in table
+                const tableBody = document.getElementById('historyTableBody');
+                if (tableBody) {
+                    tableBody.innerHTML = '<tr><td colspan="7">No transactions found</td></tr>';
+                }
+                return;
+            }
+            
+            // Also populate the history table
+            populateHistoryTable(transactions);
+        }
+        
+        function populateHistoryTable(transactions) {
+            const tableBody = document.getElementById('historyTableBody');
+            
+            if (transactions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7">No transactions found</td></tr>';
+                return;
+            }
+            
+            const tableHtml = transactions.map(t => {
+                if (t.type === 'voucher') {
+                    return `
+                        <tr class="voucher-row">
+                            <td>${ET.utils.formatDateTime(t.date)}</td>
+                            <td><span class="type-badge voucher">💳 VOUCHER</span></td>
+                            <td>Token: ${t.token_number}</td>
+                            <td>${ET.utils.formatCurrency(t.rand_amount)}</td>
+                            <td>${t.kwh_amount} kWh</td>
+                            <td>${t.notes || '-'}</td>
+                            <td><button class="btn-delete" onclick="showDeleteConfirmation(${t.id}, 'voucher')" title="Delete voucher">🗑️</button></td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr class="reading-row">
+                            <td>${ET.utils.formatDateTime(t.date)}</td>
+                            <td><span class="type-badge reading">📊 READING</span></td>
+                            <td>Meter Reading</td>
+                            <td>-</td>
+                            <td>${t.reading_value} kWh</td>
+                            <td>${t.notes || '-'}</td>
+                            <td><button class="btn-delete" onclick="showDeleteConfirmation(${t.id}, 'reading')" title="Delete reading">🗑️</button></td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+            
+            tableBody.innerHTML = tableHtml;
+            
+            // Update the count in the subtitle
+            const headerSubtitle = document.querySelector('.history-table-header p');
+            if (headerSubtitle) {
+                const currentTitle = document.querySelector('.history-table-header h2').textContent;
+                if (currentTitle.includes('Vouchers Only')) {
+                    headerSubtitle.textContent = `Showing ${transactions.length} voucher transactions in chronological order`;
+                } else if (currentTitle.includes('Readings Only')) {
+                    headerSubtitle.textContent = `Showing ${transactions.length} meter readings in chronological order`;
+                } else {
+                    headerSubtitle.textContent = `Showing all ${transactions.length} transactions in chronological order`;
+                }
+            }
+        }
+
+        // Delete functionality
+        let deleteItemId = null;
+        let deleteItemType = null;
+
+        // Get description for confirmation dialog
+        function getItemDescription(item, type) {
+            if (type === 'reading') {
+                return `meter reading of ${item.reading_value} kWh from ${new Date(item.date).toLocaleDateString()}`;
+            } else {
+                return `voucher of ${ET.utils.formatCurrency(item.rand_amount)} from ${new Date(item.date).toLocaleDateString()}`;
+            }
+        }
+
+        // Show delete confirmation modal
+        function showDeleteConfirmation(id, type) {
+            deleteItemId = id;
+            deleteItemType = type;
+
+            // Find the item in our data arrays to get the description
+            let item = null;
+            if (type === 'voucher') {
+                item = allVouchers.find(v => v.id === id);
+            } else {
+                item = allReadings.find(r => r.id === id);
+            }
+
+            const description = item ? getItemDescription(item, type) : `${type}`;
+
+            document.getElementById('deleteConfirmText').textContent =
+                `Are you sure you want to delete this ${description}? This action cannot be undone.`;
+
+            document.getElementById('deleteConfirmModal').style.display = 'flex';
+        }
+
+        // Hide delete confirmation modal
+        function hideDeleteConfirmation() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
+            deleteItemId = null;
+            deleteItemType = null;
+        }
+
+        // Perform the actual delete
+        async function performDelete() {
+            if (!deleteItemId || !deleteItemType) return;
+
+            // Show loading overlay
+            document.getElementById('loadingOverlay').style.display = 'flex';
+
+            try {
+                const endpoint = deleteItemType === 'reading' ? 'readings' : 'vouchers';
+                const response = await ET.api.delete(`/api/${endpoint}/${deleteItemId}`);
+
+                if (response && response.success) {
+                    // Show success message
+                    showNotification('Item deleted successfully', 'success');
+
+                    // Refresh the history display
+                    loadTransactions();
+                } else {
+                    showNotification(response?.error || 'Failed to delete item', 'error');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showNotification('An error occurred while deleting', 'error');
+            } finally {
+                // Hide loading overlay and modal
+                document.getElementById('loadingOverlay').style.display = 'none';
+                hideDeleteConfirmation();
+            }
+        }
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.textContent = message;
+
+            // Style the notification
+            Object.assign(notification.style, {
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                padding: '12px 20px',
+                backgroundColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff',
+                color: 'white',
+                borderRadius: '4px',
+                zIndex: '1002',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+            });
+
+            document.body.appendChild(notification);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+        
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
+        });
+
+        // Admin history functionality
+        let isAdminUser = false;
+        let allUsers = [];
+
+        async function checkAdminStatus() {
+            const ET = window.ElectricityTracker;
+            if (!ET || !ET.auth.isAuthenticated()) {
+                return false;
+            }
+
+            try {
+                const response = await ET.api.get('/api/account/profile');
+                if (response?.tenant?.role === 'super_admin') {
+                    isAdminUser = true;
+                    await setupAdminHistory();
+                    return true;
+                }
+            } catch (error) {
+                console.log('Could not check admin status:', error);
+            }
+            return false;
+        }
+
+        async function setupAdminHistory() {
+            const adminSection = document.getElementById('adminUserSelection');
+            const regularTabs = document.querySelector('.history-tabs');
+
+            // Show admin section, hide regular tabs
+            adminSection.style.display = 'block';
+            regularTabs.style.display = 'none';
+
+            // Load all users
+            await loadAllUsers();
+
+            // Set up event listeners
+            document.getElementById('userSelect').addEventListener('change', handleUserSelection);
+            document.getElementById('loadUserHistoryBtn').addEventListener('click', loadSelectedUserHistory);
+            document.getElementById('clearSelectionBtn').addEventListener('click', clearSelection);
+        }
+
+        async function loadAllUsers() {
+            const ET = window.ElectricityTracker;
+            try {
+                // Use the lightweight endpoint for better performance
+                const response = await ET.api.get('/api/admin/users/list?limit=200');
+                if (response?.success) {
+                    allUsers = response.data.users || [];
+                    populateUserSelect();
+                    console.log(`Loaded ${allUsers.length} users for selection`);
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+                ET.utils.showMessage('Failed to load users: ' + error.message, 'error');
+            }
+        }
+
+        function populateUserSelect() {
+            const userSelect = document.getElementById('userSelect');
+            userSelect.innerHTML = '<option value="">Select a user...</option>';
+
+            allUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.email} (${user.role || 'member'})`;
+                userSelect.appendChild(option);
+            });
+        }
+
+        function handleUserSelection() {
+            const userSelect = document.getElementById('userSelect');
+            const loadBtn = document.getElementById('loadUserHistoryBtn');
+            const userInfo = document.getElementById('selectedUserInfo');
+
+            if (userSelect.value) {
+                loadBtn.disabled = false;
+                const selectedUser = allUsers.find(u => u.id == userSelect.value);
+                if (selectedUser) {
+                    document.getElementById('selectedUserEmail').textContent = `Selected: ${selectedUser.email}`;
+                    document.getElementById('selectedUserStats').textContent = `Role: ${selectedUser.role || 'member'} | Tenant: ${selectedUser.tenant_name || 'No tenant'}`;
+                    userInfo.style.display = 'block';
+                }
+            } else {
+                loadBtn.disabled = true;
+                userInfo.style.display = 'none';
+            }
+        }
+
+        async function loadSelectedUserHistory() {
+            const userSelect = document.getElementById('userSelect');
+            const monthFilter = document.getElementById('monthFilter');
+            const userId = userSelect.value;
+
+            if (!userId) return;
+
+            const ET = window.ElectricityTracker;
+            try {
+                let url = `/api/admin/history/${userId}`;
+                if (monthFilter.value) {
+                    url += `?month=${monthFilter.value}`;
+                }
+
+                const response = await ET.api.get(url);
+                if (response?.success) {
+                    displayAdminHistory(response.data);
+                    // Update header to show selected user
+                    const header = document.querySelector('.history-table-header h2');
+                    header.textContent = `📋 History for ${response.data.user.email}`;
+                }
+            } catch (error) {
+                console.error('Failed to load user history:', error);
+                ET.utils.showMessage('Failed to load user history', 'error');
+            }
+        }
+
+        function displayAdminHistory(data) {
+            const tbody = document.getElementById('historyTableBody');
+            if (!data.transactions || data.transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">No transactions found for this user.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.transactions.map(transaction => {
+                const date = new Date(transaction.created_at);
+                const formattedDate = date.toLocaleDateString('en-ZA');
+                const formattedTime = date.toLocaleTimeString('en-ZA', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="date-time">
+                                <div class="date">${formattedDate}</div>
+                                <div class="time">${formattedTime}</div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="transaction-type ${transaction.type}">
+                                ${transaction.type === 'voucher' ? '💳 Voucher' : '📊 Reading'}
+                            </span>
+                        </td>
+                        <td>
+                            ${transaction.type === 'voucher' ?
+                                `Purchase of R${transaction.amount} electricity` :
+                                `Meter reading: ${transaction.reading} kWh`}
+                        </td>
+                        <td>
+                            ${transaction.type === 'voucher' ?
+                                `R${parseFloat(transaction.amount).toFixed(2)}` :
+                                '-'}
+                        </td>
+                        <td>
+                            ${transaction.type === 'reading' ?
+                                `${transaction.reading} kWh` :
+                                '-'}
+                        </td>
+                        <td>${transaction.notes || '-'}</td>
+                        <td>
+                            <span class="view-only">View Only</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function clearSelection() {
+            document.getElementById('userSelect').value = '';
+            document.getElementById('monthFilter').value = '';
+            document.getElementById('selectedUserInfo').style.display = 'none';
+            document.getElementById('loadUserHistoryBtn').disabled = true;
+
+            // Clear history table
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #999;">Select a user to view their transaction history.</td></tr>';
+
+            // Reset header
+            const header = document.querySelector('.history-table-header h2');
+            header.textContent = '📋 Admin History View';
+        }
+
+        // Event listeners for modal
+        document.addEventListener('DOMContentLoaded', async function() {
+            const ET = window.ElectricityTracker;
+
+            if (!ET) {
+                console.error('ElectricityTracker not found');
+                return;
+            }
+
+            // Check authentication
+            if (!ET.auth.checkAuth()) return;
+
+            // Add admin navigation
+            ET.addAdminNavigation();
+
+            // Check if user is super admin and setup admin history if so
+            const isAdmin = await checkAdminStatus();
+            if (!isAdmin) {
+                // If not admin, load regular history (existing functionality)
+                // You may want to call your existing loadTransactions() function here
+            }
+
+            // Cancel delete button
+            document.getElementById('cancelDelete').addEventListener('click', hideDeleteConfirmation);
+
+            // Confirm delete button
+            document.getElementById('confirmDelete').addEventListener('click', performDelete);
+
+            // Close modal when clicking outside
+            document.getElementById('deleteConfirmModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    hideDeleteConfirmation();
+                }
+            });
+
+            // ESC key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && document.getElementById('deleteConfirmModal').style.display === 'flex') {
+                    hideDeleteConfirmation();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
