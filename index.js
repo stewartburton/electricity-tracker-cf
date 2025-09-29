@@ -210,22 +210,51 @@ const serveProtectedPage = (pageName) => {
         // Authentication successful - serve the protected HTML file with cache-busting headers
         console.log(`📄 Serving protected content: ${pageName}.html`);
 
-        // Serve from auth-required subdirectory (not directly accessible but included in assets)
+        // Serve from auth-required subdirectory using direct asset access
         try {
           console.log(`📂 Serving authenticated content: auth-required/${pageName}.html`);
-          const response = await serveStatic({ path: `./public/auth-required/${pageName}.html` })(c);
 
-          if (response) {
-            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-            response.headers.set('Pragma', 'no-cache');
-            response.headers.set('Expires', '0');
-            response.headers.set('X-Auth-Required', 'true');
-            console.log(`✅ Successfully served protected content: ${pageName}.html`);
+          // Try to use __STATIC_CONTENT directly if available (Cloudflare Workers environment)
+          let htmlContent = null;
+
+          if (typeof __STATIC_CONTENT !== 'undefined' && __STATIC_CONTENT) {
+            try {
+              const assetPath = `auth-required/${pageName}.html`;
+              console.log(`📂 Attempting to read asset: ${assetPath}`);
+              htmlContent = await __STATIC_CONTENT.get(assetPath, 'text');
+            } catch (manifestError) {
+              console.log(`⚠️ Static content access failed: ${manifestError.message}`);
+            }
           }
 
-          return response;
+          // If direct access failed, try serveStatic as fallback
+          if (!htmlContent) {
+            console.log(`🔄 Fallback: Using serveStatic for ${pageName}.html`);
+            const response = await serveStatic({ path: `./public/auth-required/${pageName}.html` })(c);
+
+            if (response) {
+              response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+              response.headers.set('Pragma', 'no-cache');
+              response.headers.set('Expires', '0');
+              response.headers.set('X-Auth-Required', 'true');
+              console.log(`✅ Successfully served protected content via serveStatic: ${pageName}.html`);
+            }
+
+            return response;
+          }
+
+          // Serve the HTML content directly
+          console.log(`✅ Successfully retrieved protected content: ${pageName}.html (${htmlContent.length} chars)`);
+          return c.html(htmlContent, 200, {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Auth-Required': 'true'
+          });
+
         } catch (serveError) {
           console.error(`🚨 Failed to serve protected content ${pageName}.html:`, serveError.message);
+          console.error(`🚨 Error stack:`, serveError.stack);
           return c.text('Protected content temporarily unavailable', 503);
         }
 
