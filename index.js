@@ -132,83 +132,37 @@ app.get('/api/health', (c) => {
 const serveProtectedPage = (pageName) => {
   return async (c) => {
     try {
-      // Check for JWT token in Authorization header or cookie
-      const authHeader = c.req.header('Authorization');
+      // Get JWT token from httpOnly cookie
+      const cookies = c.req.header('Cookie') || '';
       let token = null;
 
-      if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Parse token from auth_token cookie
+      const tokenMatch = cookies.match(/auth_token=([^;]+)/);
+      if (tokenMatch) {
+        token = tokenMatch[1];
+      }
+
+      // Also check Authorization header as backup for API calls
+      const authHeader = c.req.header('Authorization');
+      if (!token && authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
       }
 
-      // If no token in header, check for token in cookies or localStorage via client-side
+      // No token found - immediately redirect to login
       if (!token) {
-        // Return authentication check page that will redirect properly
-        const authCheckPage = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>PowerMeter - ${pageName.charAt(0).toUpperCase() + pageName.slice(1)}</title>
-    <script>
-        // Immediate authentication check - cannot be bypassed
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('Access denied: Please login first');
-            window.location.replace('/login');
-            throw new Error('Authentication required');
-        } else {
-            // Verify token with server
-            fetch('/api/account/profile', {
-                headers: { 'Authorization': 'Bearer ' + token }
-            }).then(response => {
-                if (!response.ok) {
-                    throw new Error('Invalid token');
-                }
-                return response.json();
-            }).then(data => {
-                ${pageName === 'admin' ? `
-                if (!data?.tenant?.role || !['admin', 'super_admin'].includes(data.tenant.role)) {
-                    alert('Access denied: Admin privileges required');
-                    window.location.replace('/dashboard');
-                    throw new Error('Insufficient privileges');
-                }
-                ` : ''}
-                // Authentication successful - fetch and display the actual page content
-                fetch('/protected/${pageName}.html', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                }).then(response => response.text())
-                .then(html => {
-                    document.open();
-                    document.write(html);
-                    document.close();
-                });
-            }).catch(error => {
-                console.error('Auth error:', error);
-                alert('Authentication failed: Please login again');
-                localStorage.clear();
-                window.location.replace('/login');
-            });
-        }
-    </script>
-</head>
-<body>
-    <div style="text-align: center; margin-top: 50px;">
-        <h2>⚡ PowerMeter</h2>
-        <p>Verifying authentication...</p>
-    </div>
-</body>
-</html>
-        `;
-
-        return c.html(authCheckPage);
+        console.log('No auth token found, redirecting to login');
+        return c.redirect('/login');
       }
 
-      // If we have a token, verify it server-side
+      // Verify JWT token server-side
       try {
         const decoded = jwt.verify(token, c.env.JWT_SECRET);
+        console.log('Token verified for user:', decoded.userId);
 
-        // For admin pages, check role
+        const db = c.env.DB;
+
+        // For admin pages, check role permissions
         if (pageName === 'admin') {
-          const db = c.env.DB;
           const user = await db.prepare(`
             SELECT u.role, tu.role as tenant_role
             FROM users u
@@ -216,22 +170,30 @@ const serveProtectedPage = (pageName) => {
             WHERE u.id = ?
           `).bind(decoded.userId).first();
 
-          if (!user || !['admin', 'super_admin'].includes(user.role || user.tenant_role)) {
+          if (!user) {
+            console.log('User not found, redirecting to login');
+            return c.redirect('/login');
+          }
+
+          const hasAdminRole = ['admin', 'super_admin'].includes(user.role || user.tenant_role);
+          if (!hasAdminRole) {
+            console.log('User lacks admin privileges, redirecting to dashboard');
             return c.redirect('/dashboard');
           }
+
+          console.log('Admin access granted for user:', decoded.userId);
         }
 
-        // Token is valid, serve the protected file using Cloudflare Workers static serving
-        const { serveStatic } = await import('hono/cloudflare-workers');
+        // Authentication successful - serve the protected HTML file directly
         return serveStatic({ path: `./public/${pageName}.html` })(c);
 
       } catch (jwtError) {
-        console.error('JWT verification failed:', jwtError);
+        console.error('JWT verification failed:', jwtError.message);
         return c.redirect('/login');
       }
 
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('Server-side auth check failed:', error);
       return c.redirect('/login');
     }
   };
@@ -338,6 +300,9 @@ app.post('/api/auth/login', async (c) => {
       c.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // Set httpOnly cookie for server-side auth
+    c.header('Set-Cookie', `auth_token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=604800; Path=/`);
 
     // Return user data and token with role information
     return c.json({
@@ -481,13 +446,16 @@ app.post('/api/auth/register', async (c) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: userId, 
+      {
+        userId: userId,
         email: email
       },
       c.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // Set httpOnly cookie for server-side auth
+    c.header('Set-Cookie', `auth_token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=604800; Path=/`);
 
     return c.json({
       success: true,
@@ -501,6 +469,22 @@ app.post('/api/auth/register', async (c) => {
 
   } catch (error) {
     console.error('Registration error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', async (c) => {
+  try {
+    // Clear the httpOnly cookie
+    c.header('Set-Cookie', `auth_token=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
+
+    return c.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
