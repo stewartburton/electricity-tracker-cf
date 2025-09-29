@@ -190,11 +190,11 @@
             
             if (!ET) {
                 alert('Application failed to load. Please refresh the page.');
-                return;
+                throw new Error('Authentication required');
             }
 
-            // Check authentication
-            if (!ET.auth.checkAuth()) return;
+            // CRITICAL SECURITY CHECK: Must be authenticated to access settings page
+            if (!ET || !ET.auth || !ET.auth.checkAuth()) throw new Error('Authentication required');
 
             let accountData = null;
 
@@ -421,12 +421,12 @@
                 // Client-side validation
                 if (newPassword !== confirmPassword) {
                     alert('New passwords do not match');
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 if (newPassword.length < 6) {
                     alert('New password must be at least 6 characters long');
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 try {
@@ -472,7 +472,7 @@
                             No invitations sent yet
                         </div>
                     `;
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 // Group invitations by recipient email and type
@@ -546,7 +546,7 @@
             // Clear all sent invitations
             window.clearAllInvitations = async function() {
                 if (!confirm('Are you sure you want to clear all sent invitations? This action cannot be undone.')) {
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 try {
@@ -684,7 +684,7 @@
             // Remove family member
             window.removeFamilyMember = async function(userId, email) {
                 if (!confirm(`Are you sure you want to remove ${email} from your family account? This action cannot be undone.`)) {
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 try {
@@ -728,7 +728,7 @@
                 // Check if ET is available
                 if (!window.ElectricityTracker) {
                     alert('Application is still loading. Please try again in a moment.');
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 const response = await fetch('/api/invitations/generate-link', {
@@ -769,7 +769,7 @@
                 // Check if ET is available
                 if (!window.ElectricityTracker) {
                     alert('Application is still loading. Please try again in a moment.');
-                    return;
+                    throw new Error('Authentication required');
                 }
 
                 const response = await fetch('/api/invitations/generate-link', {

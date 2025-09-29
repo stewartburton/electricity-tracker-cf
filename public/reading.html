@@ -87,11 +87,11 @@
     <script>
         const ET = window.ElectricityTracker;
         
-        // Check authentication
-        if (!ET.auth.checkAuth()) {
-            // User will be redirected to login
-        } else {
-            setDefaultDateTime();
+        // CRITICAL SECURITY CHECK: Must be authenticated to access reading page
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first'); window.location.href = '/login.html'; throw new Error('Authentication required');
+        }
+        setDefaultDateTime();
         }
         
         // Set default date/time to now
@@ -169,7 +169,7 @@
                     // Show success message
                     showSuccessMessage('Reading saved successfully! ✅');
                     document.getElementById('readingForm').reset();
-                    setDefaultDateTime();
+                setDefaultDateTime();
                 }
             } catch (error) {
                 showErrorMessage('Error saving reading: ' + error.message);

@@ -407,12 +407,27 @@
         const ET = window.ElectricityTracker;
         let currentUserRole = null;
 
-        // Check authentication and admin access
-        if (!ET.auth.checkAuth()) {
-            // User will be redirected to login
-        } else {
-            loadUserProfile();
+        // CRITICAL SECURITY CHECK: Must be authenticated to access admin page
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first');
+            window.location.href = '/login.html';
+            throw new Error('Authentication required'); // Use throw instead of return
         }
+
+        // Additional security: Verify admin access via API before loading page
+        ET.api.get('/api/account/profile').then(response => {
+            if (!response?.tenant?.role || !['admin', 'super_admin'].includes(response.tenant.role)) {
+                alert('Access denied: Admin privileges required');
+                window.location.href = '/dashboard';
+                return;
+            }
+            // User is authenticated and has admin role - proceed
+            loadUserProfile();
+        }).catch(error => {
+            console.error('Authentication check failed:', error);
+            alert('Authentication failed. Please login again.');
+            ET.auth.logout();
+        });
 
         // Load user profile and determine admin level
         async function loadUserProfile() {
@@ -1025,7 +1040,7 @@
                                 </div>
                                 <div class="user-actions">
                                     <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
-                                    <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                                    <button data-user-id="${user.id}" data-user-email="${user.email}" class="reset-btn user-reset-btn">🔑 Reset Password</button>
                                 </div>
                             </div>
                         `).join('');
@@ -1079,7 +1094,7 @@
                                 </div>
                                 <div class="user-actions">
                                     <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
-                                    <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                                    <button data-user-id="${user.id}" data-user-email="${user.email}" class="reset-btn user-reset-btn">🔑 Reset Password</button>
                                 </div>
                             </div>
                         `).join('');
@@ -1118,7 +1133,7 @@
                         </div>
                         <div class="user-actions">
                             <button onclick="viewUserDetails(${user.id})" class="view-btn">👁️ View</button>
-                            <button onclick="resetUserPassword(${user.id}, '${user.email}')" class="reset-btn">🔑 Reset Password</button>
+                            <button data-user-id="${user.id}" data-user-email="${user.email}" class="reset-btn user-reset-btn">🔑 Reset Password</button>
                         </div>
                     </div>
                 `).join('');
@@ -1172,6 +1187,15 @@
             // Use the existing viewUserDetails function
             viewUserDetails(userId);
         };
+
+        // Add event listeners for dynamically created reset buttons
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('user-reset-btn')) {
+                const userId = e.target.getAttribute('data-user-id');
+                const email = e.target.getAttribute('data-user-email');
+                resetUserPassword(parseInt(userId), email);
+            }
+        });
 
         window.resetUserPassword = async function(userId, email) {
             if (!confirm(`Reset password for ${email}?`)) return;

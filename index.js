@@ -128,6 +128,175 @@ app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// CRITICAL SECURITY: Server-side authentication for protected pages
+const serveProtectedPage = (pageName) => {
+  return async (c) => {
+    try {
+      // Check for JWT token in Authorization header or cookie
+      const authHeader = c.req.header('Authorization');
+      let token = null;
+
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
+
+      // If no token in header, check for token in cookies or localStorage via client-side
+      if (!token) {
+        // Return authentication check page that will redirect properly
+        const authCheckPage = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PowerMeter - ${pageName.charAt(0).toUpperCase() + pageName.slice(1)}</title>
+    <script>
+        // Immediate authentication check - cannot be bypassed
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('Access denied: Please login first');
+            window.location.replace('/login');
+            throw new Error('Authentication required');
+        } else {
+            // Verify token with server
+            fetch('/api/account/profile', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error('Invalid token');
+                }
+                return response.json();
+            }).then(data => {
+                ${pageName === 'admin' ? `
+                if (!data?.tenant?.role || !['admin', 'super_admin'].includes(data.tenant.role)) {
+                    alert('Access denied: Admin privileges required');
+                    window.location.replace('/dashboard');
+                    throw new Error('Insufficient privileges');
+                }
+                ` : ''}
+                // Authentication successful - fetch and display the actual page content
+                fetch('/protected/${pageName}.html', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).then(response => response.text())
+                .then(html => {
+                    document.open();
+                    document.write(html);
+                    document.close();
+                });
+            }).catch(error => {
+                console.error('Auth error:', error);
+                alert('Authentication failed: Please login again');
+                localStorage.clear();
+                window.location.replace('/login');
+            });
+        }
+    </script>
+</head>
+<body>
+    <div style="text-align: center; margin-top: 50px;">
+        <h2>⚡ PowerMeter</h2>
+        <p>Verifying authentication...</p>
+    </div>
+</body>
+</html>
+        `;
+
+        return c.html(authCheckPage);
+      }
+
+      // If we have a token, verify it server-side
+      try {
+        const decoded = jwt.verify(token, c.env.JWT_SECRET);
+
+        // For admin pages, check role
+        if (pageName === 'admin') {
+          const db = c.env.DB;
+          const user = await db.prepare(`
+            SELECT u.role, tu.role as tenant_role
+            FROM users u
+            LEFT JOIN tenant_users tu ON u.id = tu.user_id
+            WHERE u.id = ?
+          `).bind(decoded.userId).first();
+
+          if (!user || !['admin', 'super_admin'].includes(user.role || user.tenant_role)) {
+            return c.redirect('/dashboard');
+          }
+        }
+
+        // Token is valid, serve the protected file using Cloudflare Workers static serving
+        const { serveStatic } = await import('hono/cloudflare-workers');
+        return serveStatic({ path: `./public/${pageName}.html` })(c);
+
+      } catch (jwtError) {
+        console.error('JWT verification failed:', jwtError);
+        return c.redirect('/login');
+      }
+
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      return c.redirect('/login');
+    }
+  };
+};
+
+// Protected routes with server-side authentication
+app.get('/admin', serveProtectedPage('admin'));
+app.get('/dashboard', serveProtectedPage('dashboard'));
+app.get('/history', serveProtectedPage('history'));
+app.get('/voucher', serveProtectedPage('voucher'));
+app.get('/reading', serveProtectedPage('reading'));
+app.get('/settings', serveProtectedPage('settings'));
+
+// Protected HTML file serving for authenticated content loading
+app.get('/protected/:page', authMiddleware, async (c) => {
+  const page = c.req.param('page');
+  const allowedPages = ['admin.html', 'dashboard.html', 'history.html', 'voucher.html', 'reading.html', 'settings.html'];
+
+  if (!allowedPages.includes(page)) {
+    return c.text('Not found', 404);
+  }
+
+  return serveStatic({ path: `./public/${page}` })(c);
+});
+
+// Debug endpoint for user authentication status
+app.get('/api/debug/auth', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+
+    // Check user role
+    const userInfo = await db.prepare(`
+      SELECT id, email, role FROM users WHERE id = ?
+    `).bind(user.userId).first();
+
+    // Check tenant info
+    const tenantInfo = await db.prepare(`
+      SELECT t.*, tu.role as tenant_role FROM tenant_users tu
+      JOIN tenants t ON tu.tenant_id = t.id
+      WHERE tu.user_id = ?
+    `).bind(user.userId).first();
+
+    // Quick data sample
+    const dataCount = await db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM readings WHERE type = 'voucher') as voucher_count,
+        (SELECT COUNT(*) FROM readings WHERE type = 'reading') as reading_count,
+        (SELECT COUNT(*) FROM users) as user_count,
+        (SELECT COUNT(*) FROM tenants) as tenant_count
+    `).first();
+
+    return c.json({
+      success: true,
+      user: userInfo,
+      tenant: tenantInfo,
+      dataCount: dataCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug auth error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 // Login endpoint
 app.post('/api/auth/login', async (c) => {
   try {
@@ -3180,18 +3349,12 @@ app.get('/js/*', serveStatic({ root: './public' }));
 app.get('/images/*', serveStatic({ root: './public' }));
 app.get('/favicon.ico', serveStatic({ root: './public' }));
 
-// Serve HTML pages
+// Serve HTML pages (unprotected public pages only)
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.get('/login', serveStatic({ path: './public/login.html' }));
 app.get('/forgot-password', serveStatic({ path: './public/forgot-password.html' }));
 app.get('/reset-password', serveStatic({ path: './public/reset-password.html' }));
 app.get('/register', serveStatic({ path: './public/register.html' }));
-app.get('/dashboard', serveStatic({ path: './public/dashboard.html' }));
-app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
-app.get('/reading', serveStatic({ path: './public/reading.html' }));
-app.get('/history', serveStatic({ path: './public/history.html' }));
-app.get('/settings', serveStatic({ path: './public/settings.html' }));
-app.get('/admin', serveStatic({ path: './public/admin.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
 
 export default app;
