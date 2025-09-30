@@ -676,6 +676,41 @@
             throw new Error('Authentication required');
         }
 
+        // Hamburger menu functionality - defined early
+        function setupHamburgerMenu() {
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            const navLinks = document.getElementById('navLinks');
+
+            console.log('setupHamburgerMenu called', { hamburgerMenu, navLinks });
+
+            if (!hamburgerMenu || !navLinks) {
+                console.error('Hamburger menu elements not found');
+                alert('DEBUG: Hamburger elements not found!');
+                return;
+            }
+
+            console.log('Adding click listener to hamburger menu');
+            hamburgerMenu.addEventListener('click', function(e) {
+                console.log('Hamburger clicked!');
+                console.log('Before toggle - navLinks classes:', navLinks.className);
+                console.log('Before toggle - hamburgerMenu classes:', hamburgerMenu.className);
+
+                navLinks.classList.toggle('active');
+                hamburgerMenu.classList.toggle('active');
+
+                console.log('After toggle - navLinks classes:', navLinks.className);
+                console.log('After toggle - hamburgerMenu classes:', hamburgerMenu.className);
+            });
+
+            // Close menu when clicking nav links
+            document.querySelectorAll('.nav-btn').forEach(link => {
+                link.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    hamburgerMenu.classList.remove('active');
+                });
+            });
+        }
+
         setupFilters();
         loadTransactions();
         setupHamburgerMenu();
@@ -984,30 +1019,6 @@
                     notification.parentNode.removeChild(notification);
                 }
             }, 3000);
-        }
-
-        // Hamburger menu functionality
-        function setupHamburgerMenu() {
-            const hamburgerMenu = document.getElementById('hamburgerMenu');
-            const navLinks = document.getElementById('navLinks');
-
-            if (!hamburgerMenu || !navLinks) {
-                console.error('Hamburger menu elements not found');
-                return;
-            }
-
-            hamburgerMenu.addEventListener('click', function() {
-                navLinks.classList.toggle('active');
-                hamburgerMenu.classList.toggle('active');
-            });
-
-            // Close menu when clicking nav links
-            document.querySelectorAll('.nav-btn').forEach(link => {
-                link.addEventListener('click', function() {
-                    navLinks.classList.remove('active');
-                    hamburgerMenu.classList.remove('active');
-                });
-            });
         }
 
         // Admin history functionality
