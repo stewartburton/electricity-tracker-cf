@@ -711,9 +711,18 @@
             });
         }
 
-        setupFilters();
-        loadTransactions();
-        setupHamburgerMenu();
+        // Wait for DOM to be ready before setting up
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
+
+        function initializePage() {
+            setupHamburgerMenu();
+            setupFilters();
+            loadTransactions();
+        }
         
         function setupFilters() {
             // Check URL for month parameter
