@@ -682,6 +682,7 @@
 
         setupFilters();
         loadTransactions();
+        setupHamburgerMenu();
         
         function setupFilters() {
             // Check URL for month parameter
@@ -990,24 +991,28 @@
         }
 
         // Hamburger menu functionality
-        document.getElementById('hamburgerMenu').addEventListener('click', function() {
-            const navLinks = document.getElementById('navLinks');
+        function setupHamburgerMenu() {
             const hamburgerMenu = document.getElementById('hamburgerMenu');
-            
-            navLinks.classList.toggle('active');
-            hamburgerMenu.classList.toggle('active');
-        });
-        
-        // Close menu when clicking nav links
-        document.querySelectorAll('.nav-btn').forEach(link => {
-            link.addEventListener('click', function() {
-                const navLinks = document.getElementById('navLinks');
-                const hamburgerMenu = document.getElementById('hamburgerMenu');
+            const navLinks = document.getElementById('navLinks');
 
-                navLinks.classList.remove('active');
-                hamburgerMenu.classList.remove('active');
+            if (!hamburgerMenu || !navLinks) {
+                console.error('Hamburger menu elements not found');
+                return;
+            }
+
+            hamburgerMenu.addEventListener('click', function() {
+                navLinks.classList.toggle('active');
+                hamburgerMenu.classList.toggle('active');
             });
-        });
+
+            // Close menu when clicking nav links
+            document.querySelectorAll('.nav-btn').forEach(link => {
+                link.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    hamburgerMenu.classList.remove('active');
+                });
+            });
+        }
 
         // Admin history functionality
         let isAdminUser = false;
