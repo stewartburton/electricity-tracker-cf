@@ -69,9 +69,12 @@
                     
                     try {
                         console.log('Making API call...');
+                        console.log('Request details:', { email, endpoint: '/api/auth/login' });
                         const data = await ET.api.post('/api/auth/login', { email, password });
                         console.log('API response:', data);
-                        
+                        console.log('Response type:', typeof data);
+                        console.log('Response keys:', data ? Object.keys(data) : 'null');
+
                         if (data && data.success) {
                             console.log('Login successful, setting token and redirecting...');
                             ET.auth.setToken(data.token);
@@ -87,11 +90,15 @@
                             console.log('Redirecting to:', redirectUrl);
                             window.location.href = redirectUrl;
                         } else {
-                            alert('Login failed: ' + (data?.error || 'Unknown error'));
+                            console.error('Login failed - data:', data);
+                            alert('Login failed: ' + (data?.error || 'Invalid response from server'));
                         }
                     } catch (error) {
-                        console.error('Login error:', error);
-                        alert(error.message || 'Login failed');
+                        console.error('Login error caught:', error);
+                        console.error('Error type:', error.constructor.name);
+                        console.error('Error message:', error.message);
+                        console.error('Error stack:', error.stack);
+                        alert('Login failed: ' + (error.message || 'Unknown error occurred'));
                     }
                 });
             }
