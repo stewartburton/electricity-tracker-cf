@@ -43,14 +43,23 @@
     <script src="/js/theme-effects.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const debugDiv = document.getElementById('debugError');
+
+            // Show initial debug info
+            debugDiv.textContent = 'Page loaded. Checking ElectricityTracker...';
+            debugDiv.style.display = 'block';
+
             const ET = window.ElectricityTracker;
-            
+
             if (!ET) {
                 console.error('ElectricityTracker not found!');
+                debugDiv.textContent = 'ERROR: ElectricityTracker object not found. Scripts may have failed to load.';
                 alert('Application failed to load. Please refresh the page.');
                 return;
             }
-            
+
+            debugDiv.textContent = 'ElectricityTracker loaded successfully. Ready to login.';
+
             console.log('ElectricityTracker loaded:', ET);
             
             // Login form handler
