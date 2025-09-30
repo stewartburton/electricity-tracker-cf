@@ -15,19 +15,14 @@
             <form id="loginFormElement" class="auth-form">
                 <h2>Login</h2>
 
-                <!-- Debug error display - ALWAYS VISIBLE -->
-                <div id="debugError" style="background: #ffebee; border: 2px solid #ef5350; padding: 10px; margin-bottom: 15px; border-radius: 5px; font-size: 12px; color: #c62828; word-wrap: break-word; max-height: 200px; overflow-y: auto;">
-                    🔍 DEBUG MODE: Waiting for JavaScript to load...
-                </div>
-
                 <div class="form-group">
                     <label for="email">Email Address</label>
-                    <input type="email" id="email" required>
+                    <input type="email" id="email" required autocomplete="email">
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" required>
+                    <input type="password" id="password" required autocomplete="current-password" maxlength="128">
                 </div>
 
                 <button type="submit" class="primary-btn">🔓 Log In</button>
@@ -44,30 +39,14 @@
     <script src="/js/app.js"></script>
     <script src="/js/theme-effects.js"></script>
     <script>
-        // Update debug immediately (before DOMContentLoaded)
-        setTimeout(function() {
-            const debugDiv = document.getElementById('debugError');
-            if (debugDiv) {
-                debugDiv.innerHTML = '✅ Script tag executed. DOMContentLoaded pending...';
-            }
-        }, 100);
-
         document.addEventListener('DOMContentLoaded', function() {
-            const debugDiv = document.getElementById('debugError');
-
-            // Show initial debug info
-            debugDiv.innerHTML = '✅ DOMContentLoaded fired. Checking window.ElectricityTracker...<br>API_BASE_URL: ' + (window.API_BASE_URL || 'undefined') + '<br>window.ElectricityTracker: ' + (typeof window.ElectricityTracker);
-
             const ET = window.ElectricityTracker;
 
             if (!ET) {
                 console.error('ElectricityTracker not found!');
-                debugDiv.innerHTML = '❌ ERROR: ElectricityTracker object not found.<br>Scripts may have failed to load.<br>Check: /api-config.js and /js/app.js';
                 alert('Application failed to load. Please refresh the page.');
                 return;
             }
-
-            debugDiv.innerHTML = '✅ ElectricityTracker loaded successfully.<br>API_URL: ' + ET.API_URL + '<br>Ready to login.';
 
             console.log('ElectricityTracker loaded:', ET);
             
@@ -88,47 +67,10 @@
                         return;
                     }
                     
-                    // Function to show debug error
-                    function showDebugError(message) {
-                        const debugDiv = document.getElementById('debugError');
-                        debugDiv.textContent = message;
-                        debugDiv.style.display = 'block';
-                    }
-
                     try {
-                        console.log('Making API call...');
-                        console.log('Request details:', { email, endpoint: '/api/auth/login' });
-
-                        showDebugError('Step 1: Sending login request to /api/auth/login...');
-
-                        // Make raw fetch call to see actual response
-                        const response = await fetch(`${ET.API_URL}/api/auth/login`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email, password })
-                        });
-
-                        showDebugError(`Step 2: Got HTTP ${response.status}. Reading response...`);
-
-                        const responseText = await response.text();
-                        showDebugError(`Step 3: Response text (first 200 chars):<br>${responseText.substring(0, 200)}`);
-
-                        let data;
-                        try {
-                            data = JSON.parse(responseText);
-                            showDebugError('Step 4: JSON parsed successfully');
-                        } catch (parseError) {
-                            showDebugError(`Step 4 ERROR: Failed to parse JSON<br>Error: ${parseError.message}<br>Response: ${responseText.substring(0, 300)}`);
-                            throw new Error('Server returned invalid JSON: ' + responseText.substring(0, 100));
-                        }
-
-                        console.log('API response:', data);
-                        console.log('Response type:', typeof data);
-                        console.log('Response keys:', data ? Object.keys(data) : 'null');
+                        const data = await ET.api.post('/api/auth/login', { email, password });
 
                         if (data && data.success) {
-                            console.log('Login successful, setting token and redirecting...');
-                            showDebugError('Step 5: Login successful! Redirecting...');
 
                             ET.auth.setToken(data.token);
                             ET.auth.setUser(data.user);
@@ -143,24 +85,10 @@
                             console.log('Redirecting to:', redirectUrl);
                             window.location.href = redirectUrl;
                         } else {
-                            console.error('Login failed - data:', data);
-                            const errorMsg = 'Login failed: ' + (data?.error || 'Invalid response from server');
-                            showDebugError(errorMsg);
-                            alert(errorMsg);
+                            alert('Login failed: ' + (data?.error || 'Invalid response from server'));
                         }
                     } catch (error) {
-                        console.error('Login error caught:', error);
-                        console.error('Error type:', error.constructor.name);
-                        console.error('Error message:', error.message);
-                        console.error('Error stack:', error.stack);
-
-                        const detailedError = `ERROR DETAILS:
-Type: ${error.constructor.name}
-Message: ${error.message || 'No message'}
-Stack: ${error.stack || 'No stack trace'}
-String: ${error.toString()}`;
-
-                        showDebugError(detailedError);
+                        console.error('Login error:', error);
                         alert('Login failed: ' + (error.message || 'Unknown error occurred'));
                     }
                 });

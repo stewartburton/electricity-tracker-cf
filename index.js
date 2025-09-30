@@ -431,7 +431,7 @@ app.get('/api/debug/auth', authMiddleware, async (c) => {
 app.post('/api/auth/login', async (c) => {
   try {
     const { email, password } = await c.req.json();
-    
+
     if (!email || !password) {
       return c.json({ error: 'Email and password are required' }, 400);
     }
@@ -439,14 +439,14 @@ app.post('/api/auth/login', async (c) => {
     // Query the database for user
     const db = c.env.DB;
     const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
-    
+
     if (!user) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
-    
+
     if (!isValidPassword) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
