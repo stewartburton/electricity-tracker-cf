@@ -93,7 +93,7 @@ const tenantMiddleware = async (c, next) => {
     if (!tenantUser) {
       // Check if user is a super admin with no tenant association
       const superAdminUser = await db.prepare(`
-        SELECT role FROM users WHERE id = ? AND role = 'super_admin'
+        SELECT email FROM users WHERE id = ? AND email = 'stewart@stewart-burton.com'
       `).bind(user.userId).first();
 
       if (superAdminUser) {
@@ -191,18 +191,17 @@ const serveProtectedPage = (pageName) => {
             return c.redirect('/login', 302);
           }
 
-          // Check if user is super admin (stewart@stewart-burton.com gets super admin access)
+          // Check if user is super admin (ONLY super admin can access /admin)
           const isSuperAdmin = user.email === 'stewart@stewart-burton.com';
-          const hasAdminRole = ['admin', 'super_admin'].includes(user.tenant_role) || isSuperAdmin;
 
-          console.log(`👤 User: ${user.email}, tenant_role=${user.tenant_role}, isSuperAdmin=${isSuperAdmin}, hasAdminRole=${hasAdminRole}`);
+          console.log(`👤 User: ${user.email}, tenant_role=${user.tenant_role}, isSuperAdmin=${isSuperAdmin}`);
 
-          if (!hasAdminRole) {
-            console.log(`🚫 User ${decoded.userId} (${user.email}) lacks admin privileges, redirecting to dashboard`);
+          if (!isSuperAdmin) {
+            console.log(`🚫 User ${decoded.userId} (${user.email}) is not super admin, redirecting to dashboard`);
             return c.redirect('/dashboard', 302);
           }
 
-          console.log(`✅ Admin access GRANTED for user: ${decoded.userId} (${user.email})`);
+          console.log(`✅ Super admin access GRANTED for user: ${decoded.userId} (${user.email})`);
         } else {
           console.log(`✅ Access granted to ${pageName} for user: ${decoded.userId}`);
         }
@@ -285,11 +284,11 @@ const serveProtectedPage = (pageName) => {
         async function loadAdminStats() {
             try {
                 const response = await ET.api.get('/api/dashboard/admin');
-                if (response) {
-                    document.getElementById('totalSpending').textContent = 'R' + (response.totalSpending || 0).toFixed(2);
-                    document.getElementById('totalKwh').textContent = (response.totalKwhPurchased || 0).toFixed(1) + ' kWh';
+                if (response && response.success) {
+                    document.getElementById('totalSpending').textContent = 'R' + (response.totalAmount || 0).toFixed(2);
+                    document.getElementById('totalKwh').textContent = (response.totalUnits || 0).toFixed(1) + ' kWh';
                     document.getElementById('avgCost').textContent = 'R' + (response.avgCostPerKwh || 0).toFixed(2);
-                    document.getElementById('activeUsers').textContent = response.activeUsersThisMonth || 0;
+                    document.getElementById('activeUsers').textContent = response.recentActivity || 0;
                 }
             } catch (error) {
                 console.error('Failed to load admin stats:', error);
@@ -1237,8 +1236,7 @@ app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) 
         COALESCE(SUM(kwh_amount), 0) as total_units,
         COALESCE(SUM(vat_amount), 0) as total_vat,
         COUNT(*) as total_vouchers
-      FROM readings
-      WHERE type = 'voucher'
+      FROM vouchers
     `).first();
 
     // Calculate average cost per kWh
@@ -1247,12 +1245,11 @@ app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) 
 
     // Get recent vouchers across all tenants
     const recentVouchers = await db.prepare(`
-      SELECT r.*, t.name as tenant_name, u.email as user_email
-      FROM readings r
-      LEFT JOIN tenants t ON r.tenant_id = t.id
-      LEFT JOIN users u ON r.user_id = u.id
-      WHERE r.type = 'voucher'
-      ORDER BY r.purchase_date DESC
+      SELECT v.*, t.name as tenant_name, u.email as user_email
+      FROM vouchers v
+      LEFT JOIN tenants t ON v.tenant_id = t.id
+      LEFT JOIN users u ON v.user_id = u.id
+      ORDER BY v.purchase_date DESC
       LIMIT 5
     `).all();
 
@@ -1262,7 +1259,6 @@ app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) 
       FROM readings r
       LEFT JOIN tenants t ON r.tenant_id = t.id
       LEFT JOIN users u ON r.user_id = u.id
-      WHERE r.type = 'reading'
       ORDER BY r.reading_date DESC
       LIMIT 5
     `).all();
@@ -1274,9 +1270,8 @@ app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) 
         SUM(rand_amount) as amount,
         SUM(kwh_amount) as kwh,
         COUNT(*) as voucher_count
-      FROM readings
-      WHERE type = 'voucher'
-        AND purchase_date >= date('now', '-6 months')
+      FROM vouchers
+      WHERE purchase_date >= date('now', '-6 months')
       GROUP BY strftime('%Y-%m', purchase_date)
       ORDER BY month DESC
     `).all();
@@ -1286,8 +1281,8 @@ app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) 
       SELECT
         (SELECT COUNT(*) FROM users) as total_users,
         (SELECT COUNT(*) FROM tenants) as total_families,
-        (SELECT COUNT(*) FROM readings WHERE type = 'reading') as total_readings,
-        (SELECT COUNT(*) FROM readings WHERE created_at >= date('now', '-30 days')) as recent_activity
+        (SELECT COUNT(*) FROM readings) as total_readings,
+        (SELECT COUNT(*) FROM vouchers WHERE created_at >= date('now', '-30 days')) as recent_activity
     `).first();
 
     return c.json({
@@ -1323,7 +1318,7 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
 
     // Regular tenant-scoped dashboard - super admins should use /api/dashboard/admin
     // Handle case where user has no tenant
-    if (!tenant.id) {
+    if (!tenant || !tenant.id) {
       return c.json({
         success: true,
         totalVouchers: 0,
@@ -1334,9 +1329,9 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
         recentVouchers: [],
         recentReadings: [],
         monthlyData: [],
-        tenantName: tenant.role === 'super_admin' ? 'Use Admin Dashboard' : 'No Family',
-        userRole: tenant.role,
-        message: tenant.role === 'super_admin' ?
+        tenantName: tenant?.role === 'super_admin' ? 'Use Admin Dashboard' : 'No Family',
+        userRole: tenant?.role || 'member',
+        message: tenant?.role === 'super_admin' ?
           'Super admins should use the admin dashboard for platform metrics' :
           'No family data available'
       });
@@ -1349,8 +1344,8 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
           COALESCE(SUM(kwh_amount), 0) as total_units,
           COALESCE(SUM(vat_amount), 0) as total_vat,
           COUNT(*) as total_vouchers
-        FROM readings
-        WHERE tenant_id = ? AND type = 'voucher'
+        FROM vouchers
+        WHERE tenant_id = ?
       `).bind(tenant.id).first();
 
       // Calculate average cost per kWh
@@ -1359,8 +1354,8 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
 
       // Get recent vouchers for the tenant (family)
       const recentVouchers = await db.prepare(`
-        SELECT * FROM readings
-        WHERE tenant_id = ? AND type = 'voucher'
+        SELECT * FROM vouchers
+        WHERE tenant_id = ?
         ORDER BY purchase_date DESC
         LIMIT 5
       `).bind(tenant.id).all();
@@ -1368,7 +1363,7 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
       // Get recent readings for the tenant (family)
       const recentReadings = await db.prepare(`
         SELECT * FROM readings
-        WHERE tenant_id = ? AND type = 'reading'
+        WHERE tenant_id = ?
         ORDER BY reading_date DESC
         LIMIT 5
       `).bind(tenant.id).all();
@@ -1379,8 +1374,8 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
           strftime('%Y-%m', purchase_date) as month,
           SUM(rand_amount) as amount,
           SUM(kwh_amount) as kwh
-        FROM readings
-        WHERE tenant_id = ? AND type = 'voucher'
+        FROM vouchers
+        WHERE tenant_id = ?
           AND purchase_date >= date('now', '-6 months')
         GROUP BY strftime('%Y-%m', purchase_date)
         ORDER BY month DESC
@@ -1422,8 +1417,7 @@ app.get('/api/dashboard/stats', authMiddleware, tenantMiddleware, async (c) => {
           COALESCE(SUM(rand_amount), 0) as total_purchased,
           COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
           COUNT(*) as voucher_count
-        FROM readings
-        WHERE type = 'voucher'
+        FROM vouchers
       `).first();
 
       // Get reading data across all tenants
@@ -2991,7 +2985,7 @@ const superAdminMiddleware = async (c, next) => {
 app.use('/api/admin/*', authMiddleware, superAdminMiddleware);
 
 // ADMIN HISTORY - Get transactions for any user (super admin only)
-app.get('/api/admin/history/:userId', async (c) => {
+app.get('/api/admin/history/:userId', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const userId = parseInt(c.req.param('userId'));
     const month = c.req.query('month');
@@ -3056,7 +3050,7 @@ app.get('/api/admin/history/:userId', async (c) => {
 });
 
 // 1. SYSTEM OVERVIEW & METRICS
-app.get('/api/admin/system/overview', async (c) => {
+app.get('/api/admin/system/overview', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const db = c.env.DB;
 
@@ -3096,8 +3090,9 @@ app.get('/api/admin/system/overview', async (c) => {
         SELECT
           COUNT(CASE WHEN type = 'voucher' THEN 1 END) as totalVouchers,
           COUNT(CASE WHEN type = 'reading' THEN 1 END) as totalReadings,
-          COALESCE(SUM(CASE WHEN type = 'voucher' THEN amount END), 0) as totalMoneySpent,
-          COALESCE(SUM(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-30 days') THEN amount END), 0) as moneySpentMonth,
+          COALESCE(SUM(CASE WHEN type = 'voucher' THEN rand_amount END), 0) as totalMoneySpent,
+          COALESCE(SUM(CASE WHEN type = 'voucher' THEN kwh_amount END), 0) as totalKwhPurchased,
+          COALESCE(SUM(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-30 days') THEN rand_amount END), 0) as moneySpentMonth,
           COUNT(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-7 days') THEN 1 END) as vouchersWeek,
           COUNT(CASE WHEN type = 'reading' AND created_at > datetime('now', '-7 days') THEN 1 END) as readingsWeek
         FROM readings
@@ -3106,11 +3101,10 @@ app.get('/api/admin/system/overview', async (c) => {
       // Financial insights
       db.prepare(`
         SELECT
-          COALESCE(ROUND(AVG(CASE WHEN type = 'voucher' THEN amount END), 2), 0) as avgVoucherAmount,
-          COALESCE(MAX(CASE WHEN type = 'voucher' THEN amount END), 0) as largestVoucher,
+          COALESCE(ROUND(AVG(CASE WHEN type = 'voucher' THEN rand_amount END), 2), 0) as avgVoucherAmount,
+          COALESCE(MAX(CASE WHEN type = 'voucher' THEN rand_amount END), 0) as largestVoucher,
           COUNT(DISTINCT user_id) as activeUsers30d
-        FROM readings
-        WHERE type = 'voucher' AND created_at > datetime('now', '-30 days')
+        FROM vouchers AND created_at > datetime('now', '-30 days')
       `).first(),
 
       // Recent activity and engagement
@@ -3132,6 +3126,7 @@ app.get('/api/admin/system/overview', async (c) => {
         totalVouchers: electricityStats?.totalVouchers || 0,
         totalReadings: electricityStats?.totalReadings || 0,
         totalMoneySpent: electricityStats?.totalMoneySpent || 0,
+        totalKwhPurchased: electricityStats?.totalKwhPurchased || 0,
         moneySpentMonth: electricityStats?.moneySpentMonth || 0,
         avgVoucherAmount: financialStats?.avgVoucherAmount || 0,
         largestVoucher: financialStats?.largestVoucher || 0,
@@ -3153,7 +3148,7 @@ app.get('/api/admin/system/overview', async (c) => {
 });
 
 // 2. USER MANAGEMENT
-app.get('/api/admin/users', async (c) => {
+app.get('/api/admin/users', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const db = c.env.DB;
     const page = parseInt(c.req.query('page') || '1');
@@ -3220,7 +3215,7 @@ app.get('/api/admin/users', async (c) => {
 });
 
 // 2.1. LIGHTWEIGHT USER LIST (for dropdowns)
-app.get('/api/admin/users/list', async (c) => {
+app.get('/api/admin/users/list', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const db = c.env.DB;
     const limit = parseInt(c.req.query('limit') || '100');
@@ -3252,7 +3247,7 @@ app.get('/api/admin/users/list', async (c) => {
 });
 
 // 3. USER DETAILS
-app.get('/api/admin/users/:userId', async (c) => {
+app.get('/api/admin/users/:userId', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const userId = parseInt(c.req.param('userId'));
     const db = c.env.DB;
@@ -3305,7 +3300,7 @@ app.get('/api/admin/users/:userId', async (c) => {
 });
 
 // 4. ADMIN PASSWORD RESET
-app.post('/api/admin/users/:userId/reset-password', async (c) => {
+app.post('/api/admin/users/:userId/reset-password', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const userId = parseInt(c.req.param('userId'));
     const { newPassword } = await c.req.json();
@@ -3354,7 +3349,7 @@ app.post('/api/admin/users/:userId/reset-password', async (c) => {
 });
 
 // 5. TENANT MANAGEMENT
-app.get('/api/admin/tenants', async (c) => {
+app.get('/api/admin/tenants', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const db = c.env.DB;
 
@@ -3387,7 +3382,7 @@ app.get('/api/admin/tenants', async (c) => {
 });
 
 // 6. SYSTEM MAINTENANCE
-app.post('/api/admin/system/cleanup', async (c) => {
+app.post('/api/admin/system/cleanup', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const db = c.env.DB;
     const { action } = await c.req.json();
@@ -3435,7 +3430,7 @@ app.post('/api/admin/system/cleanup', async (c) => {
 });
 
 // 7. DATA EXPORT
-app.get('/api/admin/export/:type', async (c) => {
+app.get('/api/admin/export/:type', authMiddleware, superAdminMiddleware, async (c) => {
   try {
     const type = c.req.param('type');
     const db = c.env.DB;

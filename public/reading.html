@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Reading - Electricity Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ Electricity Tracker</div>
+        <div class="hamburger-menu" id="hamburgerMenu">
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+            <div class="hamburger-line"></div>
+        </div>
+        <div class="nav-links" id="navLinks">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="/voucher" class="nav-btn">💳 Add Voucher</a>
+            <a href="/reading" class="nav-btn active">📊 Add Reading</a>
+            <a href="/history" class="nav-btn">📝 History</a>
+            <a href="/settings" class="nav-btn">⚙️ Settings</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+    
+    <div class="page-container">
+        <div class="page-header">
+            <h1 class="reading-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline; margin-right: 8px; vertical-align: middle;">
+                    <path d="M3 3v18h18V3H3zm16 16H5V5h14v14z" fill="currentColor"/>
+                    <path d="M7 7h2v10H7V7zm4 4h2v6h-2v-6zm4-2h2v8h-2V9z" fill="currentColor"/>
+                </svg>
+                New Meter Reading
+            </h1>
+            <p class="page-subtitle">Record your current electricity meter reading</p>
+        </div>
+        
+        <div class="reading-form-container">
+            <form id="readingForm" class="reading-form">
+                <div class="form-icon">⚡</div>
+                <h2>New Meter Reading</h2>
+                
+                <div class="form-group">
+                    <label for="reading_value">⚡ Current Reading (kWh)</label>
+                    <input type="number" id="reading_value" name="reading_value" step="0.01" placeholder="0000.00" required>
+                    <small>Enter the exact reading from your electricity meter as shown on your meter display.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reading_date">🕒 Date & Time</label>
+                    <input type="datetime-local" id="reading_date" name="reading_date">
+                    <small>When was this reading taken?</small>
+                </div>
+                
+                <button type="submit" class="primary-btn">📊 Save Reading</button>
+            </form>
+            
+            <div class="reading-tips">
+                <h3>💡 Tips for Accurate Readings</h3>
+                <ul>
+                    <li>🕒 Always read the meter at the same time of day when possible</li>
+                    <li>🔍 Make sure to read all digits including decimal places</li>
+                    <li>📷 Take a photo of your meter for reference</li>
+                    <li>📊 Regular readings help track your consumption patterns</li>
+                    <li>⚠️ For prepaid meters, readings decrease as you use electricity</li>
+                </ul>
+            </div>
+        </div>
+        
+    </div>
+    
+    <style>
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    </style>
+    
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/theme-effects.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+        
+        // CRITICAL SECURITY CHECK: Must be authenticated to access reading page
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            alert('Access denied: Please login first'); window.location.href = '/login.html'; throw new Error('Authentication required');
+        }
+        setDefaultDateTime();
+        }
+        
+        // Set default date/time to now
+        function setDefaultDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('reading_date').value = now.toISOString().slice(0, 16);
+        }
+        
+        // Show success message
+        function showSuccessMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'success-message';
+            messageDiv.innerHTML = message;
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+        
+        // Show error message  
+        function showErrorMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'error-message';
+            messageDiv.innerHTML = message;
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #dc3545;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+        
+        // Handle form submission
+        document.getElementById('readingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                reading_value: parseFloat(document.getElementById('reading_value').value),
+                reading_date: document.getElementById('reading_date').value
+            };
+            
+            try {
+                const result = await ET.api.post('/api/readings', formData);
+                
+                if (result) {
+                    // Show success message
+                    showSuccessMessage('Reading saved successfully! ✅');
+                    document.getElementById('readingForm').reset();
+                setDefaultDateTime();
+                }
+            } catch (error) {
+                showErrorMessage('Error saving reading: ' + error.message);
+            }
+        });
+        
+        // Hamburger menu functionality
+        document.getElementById('hamburgerMenu').addEventListener('click', function() {
+            const navLinks = document.getElementById('navLinks');
+            const hamburgerMenu = document.getElementById('hamburgerMenu');
+            
+            navLinks.classList.toggle('active');
+            hamburgerMenu.classList.toggle('active');
+        });
+        
+        // Close menu when clicking nav links
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                const navLinks = document.getElementById('navLinks');
+                const hamburgerMenu = document.getElementById('hamburgerMenu');
+                
+                navLinks.classList.remove('active');
+                hamburgerMenu.classList.remove('active');
+            });
+        });
+        
+    </script>
+</body>
+</html>
