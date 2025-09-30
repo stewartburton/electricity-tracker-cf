@@ -14,17 +14,20 @@
             
             <form id="loginFormElement" class="auth-form">
                 <h2>Login</h2>
-                
+
+                <!-- Debug error display -->
+                <div id="debugError" style="display: none; background: #ffebee; border: 1px solid #ef5350; padding: 10px; margin-bottom: 15px; border-radius: 5px; font-size: 12px; color: #c62828; word-wrap: break-word; max-height: 200px; overflow-y: auto;"></div>
+
                 <div class="form-group">
                     <label for="email">Email Address</label>
                     <input type="email" id="email" required>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" required>
                 </div>
-                
+
                 <button type="submit" class="primary-btn">🔓 Log In</button>
             </form>
             
@@ -67,16 +70,30 @@
                         return;
                     }
                     
+                    // Function to show debug error
+                    function showDebugError(message) {
+                        const debugDiv = document.getElementById('debugError');
+                        debugDiv.textContent = message;
+                        debugDiv.style.display = 'block';
+                    }
+
                     try {
                         console.log('Making API call...');
                         console.log('Request details:', { email, endpoint: '/api/auth/login' });
+
+                        showDebugError('Step 1: Sending login request...');
+
                         const data = await ET.api.post('/api/auth/login', { email, password });
                         console.log('API response:', data);
                         console.log('Response type:', typeof data);
                         console.log('Response keys:', data ? Object.keys(data) : 'null');
 
+                        showDebugError('Step 2: Received response from server...');
+
                         if (data && data.success) {
                             console.log('Login successful, setting token and redirecting...');
+                            showDebugError('Step 3: Login successful! Redirecting...');
+
                             ET.auth.setToken(data.token);
                             ET.auth.setUser(data.user);
 
@@ -91,13 +108,23 @@
                             window.location.href = redirectUrl;
                         } else {
                             console.error('Login failed - data:', data);
-                            alert('Login failed: ' + (data?.error || 'Invalid response from server'));
+                            const errorMsg = 'Login failed: ' + (data?.error || 'Invalid response from server');
+                            showDebugError(errorMsg);
+                            alert(errorMsg);
                         }
                     } catch (error) {
                         console.error('Login error caught:', error);
                         console.error('Error type:', error.constructor.name);
                         console.error('Error message:', error.message);
                         console.error('Error stack:', error.stack);
+
+                        const detailedError = `ERROR DETAILS:
+Type: ${error.constructor.name}
+Message: ${error.message || 'No message'}
+Stack: ${error.stack || 'No stack trace'}
+String: ${error.toString()}`;
+
+                        showDebugError(detailedError);
                         alert('Login failed: ' + (error.message || 'Unknown error occurred'));
                     }
                 });

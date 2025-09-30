@@ -39,7 +39,8 @@
       "WebFetch(domain:resend.com)",
       "WebSearch",
       "Bash(pgrep:*)",
-      "Bash(gh pr view:*)"
+      "Bash(gh pr view:*)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []
