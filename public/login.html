@@ -99,18 +99,36 @@
                         console.log('Making API call...');
                         console.log('Request details:', { email, endpoint: '/api/auth/login' });
 
-                        showDebugError('Step 1: Sending login request...');
+                        showDebugError('Step 1: Sending login request to /api/auth/login...');
 
-                        const data = await ET.api.post('/api/auth/login', { email, password });
+                        // Make raw fetch call to see actual response
+                        const response = await fetch(`${ET.API_URL}/api/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        });
+
+                        showDebugError(`Step 2: Got HTTP ${response.status}. Reading response...`);
+
+                        const responseText = await response.text();
+                        showDebugError(`Step 3: Response text (first 200 chars):<br>${responseText.substring(0, 200)}`);
+
+                        let data;
+                        try {
+                            data = JSON.parse(responseText);
+                            showDebugError('Step 4: JSON parsed successfully');
+                        } catch (parseError) {
+                            showDebugError(`Step 4 ERROR: Failed to parse JSON<br>Error: ${parseError.message}<br>Response: ${responseText.substring(0, 300)}`);
+                            throw new Error('Server returned invalid JSON: ' + responseText.substring(0, 100));
+                        }
+
                         console.log('API response:', data);
                         console.log('Response type:', typeof data);
                         console.log('Response keys:', data ? Object.keys(data) : 'null');
 
-                        showDebugError('Step 2: Received response from server...');
-
                         if (data && data.success) {
                             console.log('Login successful, setting token and redirecting...');
-                            showDebugError('Step 3: Login successful! Redirecting...');
+                            showDebugError('Step 5: Login successful! Redirecting...');
 
                             ET.auth.setToken(data.token);
                             ET.auth.setUser(data.user);
