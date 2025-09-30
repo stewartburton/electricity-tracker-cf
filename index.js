@@ -971,7 +971,7 @@ app.use('/api/export/*', authMiddleware, tenantMiddleware);
 app.use('/api/account/*', authMiddleware);
 
 // Create reading endpoint
-app.post('/api/readings', async (c) => {
+app.post('/api/readings', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
