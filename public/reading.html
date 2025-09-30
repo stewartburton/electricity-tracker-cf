@@ -89,68 +89,18 @@
         
         // CRITICAL SECURITY CHECK: Must be authenticated to access reading page
         if (!ET || !ET.auth || !ET.auth.checkAuth()) {
-            alert('Access denied: Please login first'); window.location.href = '/login.html'; throw new Error('Authentication required');
+            alert('Access denied: Please login first');
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
         }
+
         setDefaultDateTime();
-        }
-        
+
         // Set default date/time to now
         function setDefaultDateTime() {
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('reading_date').value = now.toISOString().slice(0, 16);
-        }
-        
-        // Show success message
-        function showSuccessMessage(message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'success-message';
-            messageDiv.innerHTML = message;
-            messageDiv.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #28a745;
-                color: white;
-                padding: 15px 20px;
-                border-radius: 8px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                z-index: 1000;
-                font-weight: 500;
-                animation: slideIn 0.3s ease-out;
-            `;
-            document.body.appendChild(messageDiv);
-            
-            setTimeout(() => {
-                messageDiv.style.animation = 'slideOut 0.3s ease-in';
-                setTimeout(() => messageDiv.remove(), 300);
-            }, 3000);
-        }
-        
-        // Show error message  
-        function showErrorMessage(message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'error-message';
-            messageDiv.innerHTML = message;
-            messageDiv.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #dc3545;
-                color: white;
-                padding: 15px 20px;
-                border-radius: 8px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                z-index: 1000;
-                font-weight: 500;
-                animation: slideIn 0.3s ease-out;
-            `;
-            document.body.appendChild(messageDiv);
-            
-            setTimeout(() => {
-                messageDiv.style.animation = 'slideOut 0.3s ease-in';
-                setTimeout(() => messageDiv.remove(), 300);
-            }, 3000);
         }
         
         // Handle form submission
@@ -164,15 +114,16 @@
             
             try {
                 const result = await ET.api.post('/api/readings', formData);
-                
-                if (result) {
-                    // Show success message
-                    showSuccessMessage('Reading saved successfully! ✅');
+
+                if (result && result.success) {
+                    ET.utils.showMessage('✅ Reading saved successfully!');
                     document.getElementById('readingForm').reset();
-                setDefaultDateTime();
+                    setDefaultDateTime();
+                } else {
+                    ET.utils.showMessage('Failed to save reading: ' + (result?.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                showErrorMessage('Error saving reading: ' + error.message);
+                ET.utils.showMessage('Error saving reading: ' + error.message, 'error');
             }
         });
         
