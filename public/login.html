@@ -76,7 +76,16 @@
                             console.log('Login successful, setting token and redirecting...');
                             ET.auth.setToken(data.token);
                             ET.auth.setUser(data.user);
-                            window.location.href = '/dashboard';
+
+                            // Store tenant information if available
+                            if (data.tenant) {
+                                localStorage.setItem('tenant', JSON.stringify(data.tenant));
+                            }
+
+                            // Use redirectTo from server response, or default to dashboard
+                            const redirectUrl = data.redirectTo || '/dashboard';
+                            console.log('Redirecting to:', redirectUrl);
+                            window.location.href = redirectUrl;
                         } else {
                             alert('Login failed: ' + (data?.error || 'Unknown error'));
                         }

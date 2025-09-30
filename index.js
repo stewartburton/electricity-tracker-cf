@@ -91,15 +91,30 @@ const tenantMiddleware = async (c, next) => {
     `).bind(user.userId).first();
 
     if (!tenantUser) {
-      return c.json({ error: 'No tenant access' }, 403);
-    }
+      // Check if user is a super admin with no tenant association
+      const superAdminUser = await db.prepare(`
+        SELECT email FROM users WHERE id = ? AND email = 'stewart@stewart-burton.com'
+      `).bind(user.userId).first();
 
-    c.set('tenant', {
-      id: tenantUser.id,
-      name: tenantUser.name,
-      role: tenantUser.role,
-      subscription_status: tenantUser.subscription_status
-    });
+      if (superAdminUser) {
+        // Super admin can access without tenant
+        c.set('tenant', {
+          id: null,
+          name: 'System Admin',
+          role: 'super_admin',
+          subscription_status: 'active'
+        });
+      } else {
+        return c.json({ error: 'No tenant access' }, 403);
+      }
+    } else {
+      c.set('tenant', {
+        id: tenantUser.id,
+        name: tenantUser.name,
+        role: tenantUser.role,
+        subscription_status: tenantUser.subscription_status
+      });
+    }
 
     await next();
   } catch (error) {
@@ -111,6 +126,305 @@ const tenantMiddleware = async (c, next) => {
 // Health check
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// CRITICAL SECURITY: Server-side authentication for protected pages
+const serveProtectedPage = (pageName) => {
+  return async (c) => {
+    try {
+      console.log(`🔒 SECURITY CHECK: Accessing protected page '${pageName}' from IP: ${c.req.header('CF-Connecting-IP')}`);
+      console.log(`🔒 User-Agent: ${c.req.header('User-Agent')}`);
+      console.log(`🔒 Request URL: ${c.req.url}`);
+
+      // CRITICAL: Add cache-busting headers
+      c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      c.header('Pragma', 'no-cache');
+      c.header('Expires', '0');
+
+      // Get JWT token from httpOnly cookie
+      const cookies = c.req.header('Cookie') || '';
+      console.log(`🔒 Cookies received: ${cookies}`);
+      let token = null;
+
+      // Parse token from auth_token cookie
+      const tokenMatch = cookies.match(/auth_token=([^;]+)/);
+      if (tokenMatch) {
+        token = tokenMatch[1];
+        console.log(`🔒 Found auth_token cookie: ${token.substring(0, 20)}...`);
+      }
+
+      // Also check Authorization header as backup for API calls
+      const authHeader = c.req.header('Authorization');
+      if (!token && authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+        console.log(`🔒 Found Authorization header token: ${token.substring(0, 20)}...`);
+      }
+
+      // No token found - immediately redirect to login
+      if (!token) {
+        console.log('🚨 SECURITY VIOLATION: No auth token found, redirecting to login');
+        console.log(`🚨 Request details - URL: ${c.req.url}, Method: ${c.req.method}, IP: ${c.req.header('CF-Connecting-IP')}`);
+        return c.redirect('/login', 302);
+      }
+
+      // Verify JWT token server-side
+      try {
+        const decoded = jwt.verify(token, c.env.JWT_SECRET);
+        console.log(`✅ Token verified for user: ${decoded.userId}`);
+
+        const db = c.env.DB;
+
+        // For admin pages, check role permissions
+        if (pageName === 'admin') {
+          console.log(`🔐 Checking admin permissions for user: ${decoded.userId}`);
+
+          // Check user's role in tenant_users table (no global role column exists)
+          const user = await db.prepare(`
+            SELECT tu.role as tenant_role, u.email
+            FROM users u
+            LEFT JOIN tenant_users tu ON u.id = tu.user_id
+            WHERE u.id = ?
+          `).bind(decoded.userId).first();
+
+          if (!user) {
+            console.log(`🚨 User ${decoded.userId} not found in database, redirecting to login`);
+            return c.redirect('/login', 302);
+          }
+
+          // Check if user is super admin (ONLY super admin can access /admin)
+          const isSuperAdmin = user.email === 'stewart@stewart-burton.com';
+
+          console.log(`👤 User: ${user.email}, tenant_role=${user.tenant_role}, isSuperAdmin=${isSuperAdmin}`);
+
+          if (!isSuperAdmin) {
+            console.log(`🚫 User ${decoded.userId} (${user.email}) is not super admin, redirecting to dashboard`);
+            return c.redirect('/dashboard', 302);
+          }
+
+          console.log(`✅ Super admin access GRANTED for user: ${decoded.userId} (${user.email})`);
+        } else {
+          console.log(`✅ Access granted to ${pageName} for user: ${decoded.userId}`);
+        }
+
+        // Authentication successful - serve the protected HTML file with cache-busting headers
+        console.log(`📄 Serving protected content: ${pageName}.html`);
+
+        // TEMPORARY FIX: Serve embedded admin content to bypass static content issues
+        if (pageName === 'admin') {
+          console.log(`📂 Serving embedded admin content (bypassing static content issues)`);
+
+          const adminHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - PowerMeter</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">⚡ PowerMeter - Admin</div>
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-btn">🏠 Dashboard</a>
+            <a href="#" id="logout" class="nav-btn logout">🚪 Log Out</a>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        <div class="page-header">
+            <h1>🛡️ Admin Panel</h1>
+        </div>
+
+        <div class="admin-content">
+            <div class="section">
+                <h2>⚡ Quick Electricity Statistics</h2>
+                <div class="overview-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Platform Spending</div>
+                        <div class="stat-value" id="totalSpending">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Total kWh Purchased</div>
+                        <div class="stat-value" id="totalKwh">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Average Cost per kWh</div>
+                        <div class="stat-value" id="avgCost">Loading...</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Active Users This Month</div>
+                        <div class="stat-value" id="activeUsers">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>👥 Family Management</h2>
+                <div class="admin-actions">
+                    <button class="primary-btn" onclick="generateInviteCode()">🔗 Generate Invite Code</button>
+                    <button class="primary-btn" onclick="viewFamilyMembers()">👪 View Family Members</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/api-config.js"></script>
+    <script src="/js/app.js"></script>
+    <script>
+        const ET = window.ElectricityTracker;
+
+        // Auth check
+        if (!ET || !ET.auth || !ET.auth.checkAuth()) {
+            window.location.href = '/login.html';
+            throw new Error('Authentication required');
+        }
+
+        // Load admin stats
+        async function loadAdminStats() {
+            try {
+                const response = await ET.api.get('/api/dashboard/admin');
+                if (response && response.success) {
+                    document.getElementById('totalSpending').textContent = 'R' + (response.totalAmount || 0).toFixed(2);
+                    document.getElementById('totalKwh').textContent = (response.totalUnits || 0).toFixed(1) + ' kWh';
+                    document.getElementById('avgCost').textContent = 'R' + (response.avgCostPerKwh || 0).toFixed(2);
+                    document.getElementById('activeUsers').textContent = response.recentActivity || 0;
+                }
+            } catch (error) {
+                console.error('Failed to load admin stats:', error);
+                document.getElementById('totalSpending').textContent = 'Error';
+                document.getElementById('totalKwh').textContent = 'Error';
+                document.getElementById('avgCost').textContent = 'Error';
+                document.getElementById('activeUsers').textContent = 'Error';
+            }
+        }
+
+        function generateInviteCode() {
+            alert('Invite code generation feature - to be implemented');
+        }
+
+        function viewFamilyMembers() {
+            alert('Family members view - to be implemented');
+        }
+
+        // Load stats on page load
+        loadAdminStats();
+    </script>
+
+    <style>
+        .admin-content { padding: 20px; }
+        .section { margin-bottom: 30px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-title { font-size: 14px; color: #666; margin-bottom: 10px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #333; }
+        .admin-actions { display: flex; gap: 15px; flex-wrap: wrap; }
+        .primary-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .primary-btn:hover { background: #0056b3; }
+    </style>
+</body>
+</html>
+          `;
+
+          console.log(`✅ Serving embedded admin HTML (${adminHtml.length} chars)`);
+          return c.html(adminHtml, 200, {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Auth-Required': 'true'
+          });
+        }
+
+        // For other pages, try to serve from public directory (fallback)
+        try {
+          console.log(`📂 Serving ${pageName} from public directory`);
+          const response = await serveStatic({ path: `./public/${pageName}.html` })(c);
+
+          if (response) {
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            response.headers.set('Pragma', 'no-cache');
+            response.headers.set('Expires', '0');
+            response.headers.set('X-Auth-Required', 'true');
+            console.log(`✅ Successfully served ${pageName}.html from public`);
+          }
+
+          return response;
+        } catch (serveError) {
+          console.error(`🚨 Failed to serve ${pageName}.html:`, serveError.message);
+          return c.text('Protected content temporarily unavailable', 503);
+        }
+
+      } catch (jwtError) {
+        console.error(`🚨 JWT verification failed: ${jwtError.message}`);
+        return c.redirect('/login', 302);
+      }
+
+    } catch (error) {
+      console.error(`🚨 Server-side auth check failed: ${error.message}`);
+      console.error(`🚨 Stack: ${error.stack}`);
+      return c.redirect('/login', 302);
+    }
+  };
+};
+
+// Protected routes with server-side authentication
+app.get('/admin', serveProtectedPage('admin'));
+app.get('/dashboard', serveProtectedPage('dashboard'));
+app.get('/history', serveProtectedPage('history'));
+app.get('/voucher', serveProtectedPage('voucher'));
+app.get('/reading', serveProtectedPage('reading'));
+app.get('/settings', serveProtectedPage('settings'));
+
+// Protected HTML file serving for authenticated content loading
+app.get('/protected/:page', authMiddleware, async (c) => {
+  const page = c.req.param('page');
+  const allowedPages = ['admin.html', 'dashboard.html', 'history.html', 'voucher.html', 'reading.html', 'settings.html'];
+
+  if (!allowedPages.includes(page)) {
+    return c.text('Not found', 404);
+  }
+
+  return serveStatic({ path: `./public/${page}` })(c);
+});
+
+// Debug endpoint for user authentication status
+app.get('/api/debug/auth', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+
+    // Check user role
+    const userInfo = await db.prepare(`
+      SELECT id, email, role FROM users WHERE id = ?
+    `).bind(user.userId).first();
+
+    // Check tenant info
+    const tenantInfo = await db.prepare(`
+      SELECT t.*, tu.role as tenant_role FROM tenant_users tu
+      JOIN tenants t ON tu.tenant_id = t.id
+      WHERE tu.user_id = ?
+    `).bind(user.userId).first();
+
+    // Quick data sample
+    const dataCount = await db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM readings WHERE type = 'voucher') as voucher_count,
+        (SELECT COUNT(*) FROM readings WHERE type = 'reading') as reading_count,
+        (SELECT COUNT(*) FROM users) as user_count,
+        (SELECT COUNT(*) FROM tenants) as tenant_count
+    `).first();
+
+    return c.json({
+      success: true,
+      user: userInfo,
+      tenant: tenantInfo,
+      dataCount: dataCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug auth error:', error);
+    return c.json({ error: error.message }, 500);
+  }
 });
 
 // Login endpoint
@@ -137,17 +451,28 @@ app.post('/api/auth/login', async (c) => {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
+    // Get user's tenant and role information
+    const tenantUser = await db.prepare(`
+      SELECT t.*, tu.role
+      FROM tenants t
+      JOIN tenant_users tu ON t.id = tu.tenant_id
+      WHERE tu.user_id = ?
+    `).bind(user.id).first();
+
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: user.id, 
+      {
+        userId: user.id,
         email: user.email
       },
       c.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Return user data and token
+    // Set httpOnly cookie for server-side auth
+    c.header('Set-Cookie', `auth_token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=604800; Path=/`);
+
+    // Return user data and token with role information
     return c.json({
       success: true,
       token,
@@ -155,7 +480,13 @@ app.post('/api/auth/login', async (c) => {
         id: user.id,
         email: user.email,
         created_at: user.created_at
-      }
+      },
+      tenant: tenantUser ? {
+        id: tenantUser.id,
+        name: tenantUser.name,
+        role: tenantUser.role
+      } : null,
+      redirectTo: tenantUser?.role === 'super_admin' ? '/admin' : '/dashboard'
     });
 
   } catch (error) {
@@ -283,13 +614,16 @@ app.post('/api/auth/register', async (c) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: userId, 
+      {
+        userId: userId,
         email: email
       },
       c.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // Set httpOnly cookie for server-side auth
+    c.header('Set-Cookie', `auth_token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=604800; Path=/`);
 
     return c.json({
       success: true,
@@ -303,6 +637,22 @@ app.post('/api/auth/register', async (c) => {
 
   } catch (error) {
     console.error('Registration error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', async (c) => {
+  try {
+    // Clear the httpOnly cookie
+    c.header('Set-Cookie', `auth_token=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
+
+    return c.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
@@ -516,13 +866,100 @@ async function getSharedUserIds(db, userId) {
     JOIN user_groups ug2 ON ug1.group_id = ug2.group_id
     WHERE ug1.user_id = ?
   `).bind(userId).all();
-  
+
   if (result.results && result.results.length > 0) {
     return result.results.map(row => row.user_id);
   }
-  
+
   return [userId]; // If no linked accounts, return just the current user
 }
+
+// Super Admin Setup - Create dedicated admin account
+app.post('/api/setup/create-super-admin', async (c) => {
+  try {
+    const { username, email, password, setupKey } = await c.req.json();
+    const db = c.env.DB;
+
+    // Validate setup key (you should set this in environment variables)
+    const expectedSetupKey = c.env.SUPER_ADMIN_SETUP_KEY || 'your-super-secret-setup-key-2025';
+    if (setupKey && setupKey !== expectedSetupKey) {
+      return c.json({ error: 'Invalid setup key' }, 403);
+    }
+
+    if ((!username && !email) || !password) {
+      return c.json({ error: 'Username/email and password are required' }, 400);
+    }
+
+    if (password.length < 8) {
+      return c.json({ error: 'Password must be at least 8 characters long' }, 400);
+    }
+
+    const accountEmail = email || username;
+
+    // Check if super admin already exists
+    const existingAdmin = await db.prepare(`
+      SELECT id FROM users WHERE email = ?
+    `).bind(accountEmail).first();
+
+    if (existingAdmin) {
+      return c.json({ error: 'Super admin already exists' }, 409);
+    }
+
+    // Create super admin user
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const userResult = await db.prepare(`
+      INSERT INTO users (email, password, created_at, updated_at)
+      VALUES (?, ?, datetime('now'), datetime('now'))
+    `).bind(accountEmail, hashedPassword).run();
+
+    if (!userResult.success) {
+      return c.json({ error: 'Failed to create super admin user' }, 500);
+    }
+
+    const userId = userResult.meta.last_row_id;
+
+    // Create dedicated admin tenant
+    const tenantResult = await db.prepare(`
+      INSERT INTO tenants (name, created_at, updated_at)
+      VALUES ('System Administration', datetime('now'), datetime('now'))
+    `).bind().run();
+
+    if (!tenantResult.success) {
+      return c.json({ error: 'Failed to create admin tenant' }, 500);
+    }
+
+    const tenantId = tenantResult.meta.last_row_id;
+
+    // Add user to admin tenant with super_admin role
+    await db.prepare(`
+      INSERT INTO tenant_users (tenant_id, user_id, role, joined_at)
+      VALUES (?, ?, 'super_admin', datetime('now'))
+    `).bind(tenantId, userId).run();
+
+    return c.json({
+      success: true,
+      message: 'Super admin account created successfully',
+      user: {
+        id: userId,
+        email: accountEmail,
+        role: 'super_admin',
+        tenantId: tenantId
+      }
+    });
+
+  } catch (error) {
+    console.error('Super admin creation error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    return c.json({
+      error: 'Failed to create super admin account',
+      details: error.message
+    }, 500);
+  }
+});
 
 // Protected routes
 app.use('/api/readings/*', authMiddleware, tenantMiddleware);
@@ -787,14 +1224,12 @@ app.delete('/api/vouchers/:id', async (c) => {
   }
 });
 
-// Dashboard endpoint (tenant-based)
-app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
+// Super Admin Dashboard - separate endpoint with platform-wide metrics
+app.get('/api/dashboard/admin', authMiddleware, superAdminMiddleware, async (c) => {
   try {
-    const user = c.get('user');
-    const tenant = c.get('tenant');
     const db = c.env.DB;
 
-    // Get voucher totals for the tenant (family)
+    // Get platform-wide voucher statistics
     const voucherResult = await db.prepare(`
       SELECT
         COALESCE(SUM(rand_amount), 0) as total_amount,
@@ -802,41 +1237,149 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
         COALESCE(SUM(vat_amount), 0) as total_vat,
         COUNT(*) as total_vouchers
       FROM vouchers
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    `).first();
 
     // Calculate average cost per kWh
-    const avgCostPerKwh = voucherResult.total_units > 0 ? 
+    const avgCostPerKwh = voucherResult.total_units > 0 ?
       voucherResult.total_amount / voucherResult.total_units : 0;
 
-    // Get recent vouchers for the tenant (family)
+    // Get recent vouchers across all tenants
     const recentVouchers = await db.prepare(`
-      SELECT * FROM vouchers
-      WHERE tenant_id = ?
-      ORDER BY purchase_date DESC
+      SELECT v.*, t.name as tenant_name, u.email as user_email
+      FROM vouchers v
+      LEFT JOIN tenants t ON v.tenant_id = t.id
+      LEFT JOIN users u ON v.user_id = u.id
+      ORDER BY v.purchase_date DESC
       LIMIT 5
-    `).bind(tenant.id).all();
+    `).all();
 
-    // Get recent readings for the tenant (family)
+    // Get recent readings across all tenants
     const recentReadings = await db.prepare(`
-      SELECT * FROM readings
-      WHERE tenant_id = ?
-      ORDER BY reading_date DESC
+      SELECT r.*, t.name as tenant_name, u.email as user_email
+      FROM readings r
+      LEFT JOIN tenants t ON r.tenant_id = t.id
+      LEFT JOIN users u ON r.user_id = u.id
+      ORDER BY r.reading_date DESC
       LIMIT 5
-    `).bind(tenant.id).all();
+    `).all();
 
-    // Get monthly data for the last 6 months for the tenant (family)
+    // Get monthly data for the last 6 months across all tenants
     const monthlyData = await db.prepare(`
       SELECT
         strftime('%Y-%m', purchase_date) as month,
         SUM(rand_amount) as amount,
-        SUM(kwh_amount) as kwh
+        SUM(kwh_amount) as kwh,
+        COUNT(*) as voucher_count
       FROM vouchers
-      WHERE tenant_id = ?
-        AND purchase_date >= date('now', '-6 months')
+      WHERE purchase_date >= date('now', '-6 months')
       GROUP BY strftime('%Y-%m', purchase_date)
       ORDER BY month DESC
-    `).bind(tenant.id).all();
+    `).all();
+
+    // Get platform statistics
+    const platformStats = await db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM tenants) as total_families,
+        (SELECT COUNT(*) FROM readings) as total_readings,
+        (SELECT COUNT(*) FROM vouchers WHERE created_at >= date('now', '-30 days')) as recent_activity
+    `).first();
+
+    return c.json({
+      success: true,
+      type: 'super_admin_dashboard',
+      totalVouchers: voucherResult.total_vouchers || 0,
+      totalAmount: voucherResult.total_amount || 0,
+      totalUnits: voucherResult.total_units || 0,
+      totalVat: voucherResult.total_vat || 0,
+      avgCostPerKwh: avgCostPerKwh || 0,
+      totalUsers: platformStats.total_users || 0,
+      totalFamilies: platformStats.total_families || 0,
+      totalReadings: platformStats.total_readings || 0,
+      recentActivity: platformStats.recent_activity || 0,
+      recentVouchers: recentVouchers?.results || [],
+      recentReadings: recentReadings?.results || [],
+      monthlyData: monthlyData?.results || [],
+      lastUpdated: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Super admin dashboard error:', error);
+    return c.json({ error: 'Failed to fetch admin dashboard data' }, 500);
+  }
+});
+
+// Regular Dashboard endpoint (tenant-based only)
+app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const tenant = c.get('tenant');
+    const db = c.env.DB;
+
+    // Regular tenant-scoped dashboard - super admins should use /api/dashboard/admin
+    // Handle case where user has no tenant
+    if (!tenant || !tenant.id) {
+      return c.json({
+        success: true,
+        totalVouchers: 0,
+        totalAmount: 0,
+        totalUnits: 0,
+        totalVat: 0,
+        avgCostPerKwh: 0,
+        recentVouchers: [],
+        recentReadings: [],
+        monthlyData: [],
+        tenantName: tenant?.role === 'super_admin' ? 'Use Admin Dashboard' : 'No Family',
+        userRole: tenant?.role || 'member',
+        message: tenant?.role === 'super_admin' ?
+          'Super admins should use the admin dashboard for platform metrics' :
+          'No family data available'
+      });
+    }
+
+    // Process tenant-scoped dashboard data
+    const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_amount,
+          COALESCE(SUM(kwh_amount), 0) as total_units,
+          COALESCE(SUM(vat_amount), 0) as total_vat,
+          COUNT(*) as total_vouchers
+        FROM vouchers
+        WHERE tenant_id = ?
+      `).bind(tenant.id).first();
+
+      // Calculate average cost per kWh
+      const avgCostPerKwh = voucherResult.total_units > 0 ?
+        voucherResult.total_amount / voucherResult.total_units : 0;
+
+      // Get recent vouchers for the tenant (family)
+      const recentVouchers = await db.prepare(`
+        SELECT * FROM vouchers
+        WHERE tenant_id = ?
+        ORDER BY purchase_date DESC
+        LIMIT 5
+      `).bind(tenant.id).all();
+
+      // Get recent readings for the tenant (family)
+      const recentReadings = await db.prepare(`
+        SELECT * FROM readings
+        WHERE tenant_id = ?
+        ORDER BY reading_date DESC
+        LIMIT 5
+      `).bind(tenant.id).all();
+
+      // Get monthly data for the last 6 months for the tenant (family)
+      const monthlyData = await db.prepare(`
+        SELECT
+          strftime('%Y-%m', purchase_date) as month,
+          SUM(rand_amount) as amount,
+          SUM(kwh_amount) as kwh
+        FROM vouchers
+        WHERE tenant_id = ?
+          AND purchase_date >= date('now', '-6 months')
+        GROUP BY strftime('%Y-%m', purchase_date)
+        ORDER BY month DESC
+      `).bind(tenant.id).all();
 
     return c.json({
       success: true,
@@ -845,9 +1388,9 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
       totalUnits: voucherResult.total_units || 0,
       totalVat: voucherResult.total_vat || 0,
       avgCostPerKwh: avgCostPerKwh || 0,
-      recentVouchers: recentVouchers.results || [],
-      recentReadings: recentReadings.results || [],
-      monthlyData: monthlyData.results || [],
+      recentVouchers: recentVouchers?.results || [],
+      recentReadings: recentReadings?.results || [],
+      monthlyData: monthlyData?.results || [],
       tenantName: tenant.name,
       userRole: tenant.role
     });
@@ -858,78 +1401,188 @@ app.get('/api/dashboard', authMiddleware, tenantMiddleware, async (c) => {
   }
 });
 
-// Dashboard stats (tenant-based)
+// Dashboard stats (tenant-based or super admin aggregate)
 app.get('/api/dashboard/stats', authMiddleware, tenantMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const tenant = c.get('tenant');
     const db = c.env.DB;
 
-    // Get voucher totals (money spent) for the tenant (family)
-    const voucherResult = await db.prepare(`
-      SELECT
-        COALESCE(SUM(rand_amount), 0) as total_purchased,
-        COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
-        COUNT(*) as voucher_count
-      FROM vouchers
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    const isSuperAdmin = tenant?.role === 'super_admin';
 
-    // Get reading data for the tenant (family)
-    const readingResult = await db.prepare(`
-      SELECT
-        COUNT(*) as reading_count,
-        MIN(reading_value) as lowest_reading,
-        MAX(reading_value) as highest_reading,
-        AVG(reading_value) as avg_reading
-      FROM readings
-      WHERE tenant_id = ?
-    `).bind(tenant.id).first();
+    if (isSuperAdmin) {
+      // Super admin sees aggregate stats across ALL users/tenants
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_purchased,
+          COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
+          COUNT(*) as voucher_count
+        FROM vouchers
+      `).first();
 
-    // Get recent vouchers for the tenant (family)
-    const recentVouchers = await db.prepare(`
-      SELECT
-        'voucher' as type,
-        rand_amount as amount,
-        kwh_amount,
-        token_number,
-        purchase_date as date,
-        created_at,
-        notes
-      FROM vouchers
-      WHERE tenant_id = ?
-      ORDER BY purchase_date DESC
-      LIMIT 3
-    `).bind(tenant.id).all();
+      // Get reading data across all tenants
+      const readingResult = await db.prepare(`
+        SELECT
+          COUNT(*) as reading_count,
+          MIN(reading_value) as lowest_reading,
+          MAX(reading_value) as highest_reading,
+          AVG(reading_value) as avg_reading
+        FROM readings
+        WHERE type = 'reading'
+      `).first();
 
-    const recentReadings = await db.prepare(`
-      SELECT
-        'reading' as type,
-        reading_value as amount,
-        reading_date as date,
-        created_at,
-        notes
-      FROM readings
-      WHERE tenant_id = ?
-      ORDER BY reading_date DESC
-      LIMIT 3
-    `).bind(tenant.id).all();
+      // Get recent vouchers across all tenants
+      const recentVouchers = await db.prepare(`
+        SELECT
+          'voucher' as type,
+          r.rand_amount as amount,
+          r.kwh_amount,
+          r.token_number,
+          r.purchase_date as date,
+          r.created_at,
+          r.notes,
+          t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'voucher'
+        ORDER BY r.purchase_date DESC
+        LIMIT 3
+      `).all();
 
-    return c.json({
-      success: true,
-      data: {
-        totalPurchased: voucherResult.total_purchased || 0,
-        totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
-        voucherCount: voucherResult.voucher_count || 0,
-        readingCount: readingResult.reading_count || 0,
-        lowestReading: readingResult.lowest_reading || 0,
-        highestReading: readingResult.highest_reading || 0,
-        avgReading: readingResult.avg_reading || 0,
-        recentVouchers: recentVouchers.results || [],
-        recentReadings: recentReadings.results || [],
-        linkedAccountCount: sharedUserIds.length
+      const recentReadings = await db.prepare(`
+        SELECT
+          'reading' as type,
+          r.reading_value as amount,
+          r.reading_date as date,
+          r.created_at,
+          r.notes,
+          t.name as tenant_name
+        FROM readings r
+        LEFT JOIN tenants t ON r.tenant_id = t.id
+        WHERE r.type = 'reading'
+        ORDER BY r.reading_date DESC
+        LIMIT 3
+      `).all();
+
+      // Get platform stats for super admin
+      const platformStats = await db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM users) as total_users,
+          (SELECT COUNT(*) FROM tenants) as total_families
+      `).first();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: true,
+        data: {
+          totalPurchased: voucherResult.total_purchased || 0,
+          totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
+          voucherCount: voucherResult.voucher_count || 0,
+          readingCount: readingResult.reading_count || 0,
+          lowestReading: readingResult.lowest_reading || 0,
+          highestReading: readingResult.highest_reading || 0,
+          avgReading: readingResult.avg_reading || 0,
+          totalUsers: platformStats.total_users || 0,
+          totalFamilies: platformStats.total_families || 0,
+          recentVouchers: recentVouchers?.results || [],
+          recentReadings: recentReadings?.results || []
+        }
+      });
+    } else {
+      // Regular tenant-scoped stats with updated schema
+      // Handle case where super admin has no tenant
+      if (!tenant.id) {
+        return c.json({
+          success: true,
+          isSuperAdmin: false,
+          data: {
+            totalPurchased: 0,
+            totalKwhPurchased: 0,
+            voucherCount: 0,
+            readingCount: 0,
+            lowestReading: 0,
+            highestReading: 0,
+            avgReading: 0,
+            recentVouchers: [],
+            recentReadings: [],
+            linkedAccountCount: 0
+          }
+        });
       }
-    });
+
+      const voucherResult = await db.prepare(`
+        SELECT
+          COALESCE(SUM(rand_amount), 0) as total_purchased,
+          COALESCE(SUM(kwh_amount), 0) as total_kwh_purchased,
+          COUNT(*) as voucher_count
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+      `).bind(tenant.id).first();
+
+      // Get reading data for the tenant (family)
+      const readingResult = await db.prepare(`
+        SELECT
+          COUNT(*) as reading_count,
+          MIN(reading_value) as lowest_reading,
+          MAX(reading_value) as highest_reading,
+          AVG(reading_value) as avg_reading
+        FROM readings
+        WHERE tenant_id = ? AND type = 'reading'
+      `).bind(tenant.id).first();
+
+      // Get recent vouchers for the tenant (family)
+      const recentVouchers = await db.prepare(`
+        SELECT
+          'voucher' as type,
+          rand_amount as amount,
+          kwh_amount,
+          token_number,
+          purchase_date as date,
+          created_at,
+          notes
+        FROM readings
+        WHERE tenant_id = ? AND type = 'voucher'
+        ORDER BY purchase_date DESC
+        LIMIT 3
+      `).bind(tenant.id).all();
+
+      const recentReadings = await db.prepare(`
+        SELECT
+          'reading' as type,
+          reading_value as amount,
+          reading_date as date,
+          created_at,
+          notes
+        FROM readings
+        WHERE tenant_id = ? AND type = 'reading'
+        ORDER BY reading_date DESC
+        LIMIT 3
+      `).bind(tenant.id).all();
+
+      // Get linked account count for the tenant
+      const linkedAccounts = await db.prepare(`
+        SELECT COUNT(*) as count
+        FROM tenant_users
+        WHERE tenant_id = ?
+      `).bind(tenant.id).first();
+
+      return c.json({
+        success: true,
+        isSuperAdmin: false,
+        data: {
+          totalPurchased: voucherResult.total_purchased || 0,
+          totalKwhPurchased: voucherResult.total_kwh_purchased || 0,
+          voucherCount: voucherResult.voucher_count || 0,
+          readingCount: readingResult.reading_count || 0,
+          lowestReading: readingResult.lowest_reading || 0,
+          highestReading: readingResult.highest_reading || 0,
+          avgReading: readingResult.avg_reading || 0,
+          recentVouchers: recentVouchers?.results || [],
+          recentReadings: recentReadings?.results || [],
+          linkedAccountCount: linkedAccounts.count || 0
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -1012,6 +1665,72 @@ app.get('/api/account/info', async (c) => {
   } catch (error) {
     console.error('Account info error:', error);
     return c.json({ error: 'Failed to fetch account info' }, 500);
+  }
+});
+
+// Account profile endpoint for admin navigation
+app.get('/api/account/profile', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+
+    // Get user's tenant and role information
+    const tenantInfo = await db.prepare(`
+      SELECT
+        t.id,
+        t.name,
+        tu.role
+      FROM tenant_users tu
+      JOIN tenants t ON tu.tenant_id = t.id
+      WHERE tu.user_id = ?
+    `).bind(user.userId).first();
+
+    if (tenantInfo) {
+      return c.json({
+        success: true,
+        user: {
+          id: user.userId,
+          email: user.email
+        },
+        tenant: {
+          id: tenantInfo.id,
+          name: tenantInfo.name,
+          role: tenantInfo.role
+        }
+      });
+    } else {
+      // Check if user is a super admin without tenant association
+      const superAdminCheck = await db.prepare(`
+        SELECT role FROM users WHERE id = ? AND role = 'super_admin'
+      `).bind(user.userId).first();
+
+      if (superAdminCheck) {
+        return c.json({
+          success: true,
+          user: {
+            id: user.userId,
+            email: user.email
+          },
+          tenant: {
+            id: null,
+            name: 'System Admin',
+            role: 'super_admin'
+          }
+        });
+      } else {
+        return c.json({
+          success: true,
+          user: {
+            id: user.userId,
+            email: user.email
+          },
+          tenant: null
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Account profile error:', error);
+    return c.json({ error: 'Failed to fetch profile' }, 500);
   }
 });
 
@@ -2220,24 +2939,601 @@ app.post('/api/family/remove-member', authMiddleware, tenantMiddleware, async (c
   }
 });
 
+// ============================================================================
+// COMPREHENSIVE ADMIN API ENDPOINTS - SUPER ADMIN ONLY
+// ============================================================================
+
+// Admin middleware - requires super_admin role
+const superAdminMiddleware = async (c, next) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const db = c.env.DB;
+
+    // Get user email and tenant role
+    const userCheck = await db.prepare(`
+      SELECT u.email, tu.role as tenant_role
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      WHERE u.id = ?
+    `).bind(user.userId).first();
+
+    if (!userCheck) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Check if user is super admin (either hardcoded email or tenant role)
+    const isSuperAdmin = userCheck.email === 'stewart@stewart-burton.com';
+    const hasAdminRole = ['admin', 'super_admin'].includes(userCheck.tenant_role);
+
+    if (!isSuperAdmin && !hasAdminRole) {
+      return c.json({ error: 'Super admin access required' }, 403);
+    }
+
+    console.log(`✅ Super admin middleware passed for user: ${userCheck.email}`);
+    await next();
+  } catch (error) {
+    console.error('Super admin middleware error:', error);
+    return c.json({ error: 'Access denied' }, 403);
+  }
+};
+
+// Apply admin middleware to all admin routes
+app.use('/api/admin/*', authMiddleware, superAdminMiddleware);
+
+// ADMIN HISTORY - Get transactions for any user (super admin only)
+app.get('/api/admin/history/:userId', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const month = c.req.query('month');
+    const db = c.env.DB;
+
+    if (!userId || isNaN(userId)) {
+      return c.json({ error: 'Valid user ID is required' }, 400);
+    }
+
+    // Verify user exists
+    const user = await db.prepare('SELECT id, email FROM users WHERE id = ?').bind(userId).first();
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Build query with optional month filter
+    let query = `
+      SELECT
+        r.id,
+        r.type,
+        r.amount,
+        r.reading,
+        r.created_at,
+        r.notes,
+        t.name as tenant_name
+      FROM readings r
+      LEFT JOIN tenants t ON r.tenant_id = t.id
+      WHERE r.user_id = ?
+    `;
+
+    const params = [userId];
+
+    if (month) {
+      query += ` AND DATE(r.created_at) >= ? AND DATE(r.created_at) < ?`;
+      const startDate = `${month}-01`;
+      const endDate = new Date(month + '-01');
+      endDate.setMonth(endDate.getMonth() + 1);
+      const endDateStr = endDate.toISOString().split('T')[0];
+      params.push(startDate, endDateStr);
+    }
+
+    query += ` ORDER BY r.created_at DESC LIMIT 100`;
+
+    const transactions = await db.prepare(query).bind(...params).all();
+
+    return c.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email
+        },
+        transactions: transactions.results || [],
+        totalCount: transactions.results?.length || 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin history error:', error);
+    return c.json({ error: 'Failed to fetch user history' }, 500);
+  }
+});
+
+// 1. SYSTEM OVERVIEW & METRICS
+app.get('/api/admin/system/overview', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+
+    // Get comprehensive electricity tracking admin metrics
+    const [
+      userStats,
+      familyStats,
+      electricityStats,
+      financialStats,
+      activityStats
+    ] = await Promise.all([
+      // Active users and growth
+      db.prepare(`
+        SELECT
+          COUNT(*) as totalUsers,
+          COUNT(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 END) as newUsersWeek,
+          COUNT(CASE WHEN created_at > datetime('now', '-30 days') THEN 1 END) as newUsersMonth
+        FROM users
+      `).first(),
+
+      // Family/Tenant statistics
+      db.prepare(`
+        SELECT
+          COUNT(*) as totalFamilies,
+          COUNT(CASE WHEN created_at > datetime('now', '-30 days') THEN 1 END) as newFamiliesMonth,
+          ROUND(AVG(member_count), 1) as avgFamilySize
+        FROM (
+          SELECT t.id, t.created_at, COUNT(tu.user_id) as member_count
+          FROM tenants t
+          LEFT JOIN tenant_users tu ON t.id = tu.tenant_id
+          GROUP BY t.id, t.created_at
+        )
+      `).first(),
+
+      // Electricity consumption & purchase statistics
+      db.prepare(`
+        SELECT
+          COUNT(CASE WHEN type = 'voucher' THEN 1 END) as totalVouchers,
+          COUNT(CASE WHEN type = 'reading' THEN 1 END) as totalReadings,
+          COALESCE(SUM(CASE WHEN type = 'voucher' THEN rand_amount END), 0) as totalMoneySpent,
+          COALESCE(SUM(CASE WHEN type = 'voucher' THEN kwh_amount END), 0) as totalKwhPurchased,
+          COALESCE(SUM(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-30 days') THEN rand_amount END), 0) as moneySpentMonth,
+          COUNT(CASE WHEN type = 'voucher' AND created_at > datetime('now', '-7 days') THEN 1 END) as vouchersWeek,
+          COUNT(CASE WHEN type = 'reading' AND created_at > datetime('now', '-7 days') THEN 1 END) as readingsWeek
+        FROM readings
+      `).first(),
+
+      // Financial insights
+      db.prepare(`
+        SELECT
+          COALESCE(ROUND(AVG(CASE WHEN type = 'voucher' THEN rand_amount END), 2), 0) as avgVoucherAmount,
+          COALESCE(MAX(CASE WHEN type = 'voucher' THEN rand_amount END), 0) as largestVoucher,
+          COUNT(DISTINCT user_id) as activeUsers30d
+        FROM vouchers AND created_at > datetime('now', '-30 days')
+      `).first(),
+
+      // Recent activity and engagement
+      db.prepare(`
+        SELECT
+          COUNT(CASE WHEN created_at > datetime('now', '-1 day') THEN 1 END) as activity24h,
+          COUNT(CASE WHEN created_at > datetime('now', '-7 days') THEN 1 END) as activity7d,
+          COUNT(DISTINCT user_id) as activeUsersWeek
+        FROM readings
+        WHERE created_at > datetime('now', '-7 days')
+      `).first()
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        totalUsers: userStats?.totalUsers || 0,
+        totalFamilies: familyStats?.totalFamilies || 0,
+        totalVouchers: electricityStats?.totalVouchers || 0,
+        totalReadings: electricityStats?.totalReadings || 0,
+        totalMoneySpent: electricityStats?.totalMoneySpent || 0,
+        totalKwhPurchased: electricityStats?.totalKwhPurchased || 0,
+        moneySpentMonth: electricityStats?.moneySpentMonth || 0,
+        avgVoucherAmount: financialStats?.avgVoucherAmount || 0,
+        largestVoucher: financialStats?.largestVoucher || 0,
+        activeUsers30d: financialStats?.activeUsers30d || 0,
+        activity24h: activityStats?.activity24h || 0,
+        activity7d: activityStats?.activity7d || 0,
+        activeUsersWeek: activityStats?.activeUsersWeek || 0,
+        avgFamilySize: familyStats?.avgFamilySize || 0,
+        newUsersWeek: userStats?.newUsersWeek || 0,
+        newUsersMonth: userStats?.newUsersMonth || 0,
+        vouchersWeek: electricityStats?.vouchersWeek || 0,
+        readingsWeek: electricityStats?.readingsWeek || 0
+      }
+    });
+  } catch (error) {
+    console.error('System overview error:', error);
+    return c.json({ error: 'Failed to fetch system overview' }, 500);
+  }
+});
+
+// 2. USER MANAGEMENT
+app.get('/api/admin/users', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+    const page = parseInt(c.req.query('page') || '1');
+    const limit = parseInt(c.req.query('limit') || '50');
+    const search = c.req.query('search') || '';
+    const offset = (page - 1) * limit;
+
+    let searchFilter = '';
+    let searchParams = [limit, offset];
+
+    if (search) {
+      searchFilter = 'WHERE u.email LIKE ?';
+      searchParams = [`%${search}%`, limit, offset];
+    }
+
+    // Optimized query: Get users first, then join with aggregated counts
+    const users = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        u.updated_at,
+        t.name as tenant_name,
+        tu.role,
+        tu.joined_at,
+        COALESCE(rc.voucher_count, 0) as voucher_count,
+        COALESCE(rc.reading_count, 0) as reading_count
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COUNT(CASE WHEN type = 'voucher' THEN 1 END) as voucher_count,
+          COUNT(CASE WHEN type = 'reading' THEN 1 END) as reading_count
+        FROM readings
+        GROUP BY user_id
+      ) rc ON u.id = rc.user_id
+      ${searchFilter}
+      ORDER BY u.created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(...searchParams).all();
+
+    const totalCount = await db.prepare(`
+      SELECT COUNT(*) as count FROM users u ${searchFilter}
+    `).bind(search ? `%${search}%` : null).first();
+
+    return c.json({
+      success: true,
+      data: {
+        users: users.results || [],
+        pagination: {
+          page,
+          limit,
+          total: totalCount.count,
+          pages: Math.ceil(totalCount.count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Users list error:', error);
+    return c.json({ error: 'Failed to fetch users' }, 500);
+  }
+});
+
+// 2.1. LIGHTWEIGHT USER LIST (for dropdowns)
+app.get('/api/admin/users/list', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+    const limit = parseInt(c.req.query('limit') || '100');
+
+    // Lightweight query for dropdowns - no expensive calculations
+    const users = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        tu.role,
+        t.name as tenant_name
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      ORDER BY u.email ASC
+      LIMIT ?
+    `).bind(limit).all();
+
+    return c.json({
+      success: true,
+      data: {
+        users: users.results || []
+      }
+    });
+  } catch (error) {
+    console.error('User list error:', error);
+    return c.json({ error: 'Failed to fetch user list' }, 500);
+  }
+});
+
+// 3. USER DETAILS
+app.get('/api/admin/users/:userId', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const db = c.env.DB;
+
+    const userDetails = await db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        u.updated_at,
+        t.id as tenant_id,
+        t.name as tenant_name,
+        tu.role,
+        tu.joined_at
+      FROM users u
+      LEFT JOIN tenant_users tu ON u.id = tu.user_id
+      LEFT JOIN tenants t ON tu.tenant_id = t.id
+      WHERE u.id = ?
+    `).bind(userId).first();
+
+    if (!userDetails) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Get user's activity
+    const [vouchers, readings] = await Promise.all([
+      db.prepare(`
+        SELECT * FROM readings WHERE user_id = ? AND type = 'voucher' ORDER BY created_at DESC LIMIT 10
+      `).bind(userId).all(),
+
+      db.prepare(`
+        SELECT * FROM readings WHERE user_id = ? AND type = 'reading' ORDER BY created_at DESC LIMIT 10
+      `).bind(userId).all()
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        user: userDetails,
+        activity: {
+          vouchers: vouchers.results || [],
+          readings: readings.results || []
+        }
+      }
+    });
+  } catch (error) {
+    console.error('User details error:', error);
+    return c.json({ error: 'Failed to fetch user details' }, 500);
+  }
+});
+
+// 4. ADMIN PASSWORD RESET
+app.post('/api/admin/users/:userId/reset-password', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const userId = parseInt(c.req.param('userId'));
+    const { newPassword } = await c.req.json();
+    const db = c.env.DB;
+
+    if (!newPassword || newPassword.length < 6) {
+      return c.json({ error: 'Password must be at least 6 characters long' }, 400);
+    }
+
+    const user = await db.prepare(`
+      SELECT email FROM users WHERE id = ?
+    `).bind(userId).first();
+
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await db.prepare(`
+      UPDATE users
+      SET password = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(hashedPassword, userId).run();
+
+    // Send email notification to user
+    try {
+      const emailService = new CloudflareEmailService(c.env);
+      await emailService.sendAdminPasswordResetNotification({
+        recipientEmail: user.email,
+        adminEmail: c.get('user')?.email || 'System Administrator'
+      });
+    } catch (emailError) {
+      console.error('Failed to send password reset notification email:', emailError);
+      // Don't fail the password reset if email fails
+    }
+
+    return c.json({
+      success: true,
+      message: `Password reset successfully for ${user.email}. Notification email sent.`
+    });
+  } catch (error) {
+    console.error('Admin password reset error:', error);
+    return c.json({ error: 'Failed to reset password' }, 500);
+  }
+});
+
+// 5. TENANT MANAGEMENT
+app.get('/api/admin/tenants', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+
+    const tenants = await db.prepare(`
+      SELECT
+        t.id,
+        t.name,
+        t.created_at,
+        COUNT(tu.user_id) as member_count,
+        COALESCE(SUM(v.rand_amount), 0) as total_spent,
+        COALESCE(SUM(v.kwh_amount), 0) as total_kwh,
+        COUNT(v.id) as voucher_count,
+        COUNT(r.id) as reading_count
+      FROM tenants t
+      LEFT JOIN tenant_users tu ON t.id = tu.tenant_id
+      LEFT JOIN vouchers v ON t.id = v.tenant_id
+      LEFT JOIN readings r ON t.id = r.tenant_id
+      GROUP BY t.id, t.name, t.created_at
+      ORDER BY t.created_at DESC
+    `).all();
+
+    return c.json({
+      success: true,
+      data: tenants.results || []
+    });
+  } catch (error) {
+    console.error('Tenants list error:', error);
+    return c.json({ error: 'Failed to fetch tenants' }, 500);
+  }
+});
+
+// 6. SYSTEM MAINTENANCE
+app.post('/api/admin/system/cleanup', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const db = c.env.DB;
+    const { action } = await c.req.json();
+
+    let result = {};
+
+    switch (action) {
+      case 'expired_tokens':
+        const tokenCleanup = await db.prepare(`
+          DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')
+        `).run();
+        result.message = `Cleaned up ${tokenCleanup.changes} expired password reset tokens`;
+        break;
+
+      case 'expired_invites':
+        const inviteCleanup = await db.prepare(`
+          UPDATE invite_codes SET is_active = 0 WHERE expires_at < datetime('now')
+        `).run();
+        result.message = `Deactivated ${inviteCleanup.changes} expired invite codes`;
+        break;
+
+      case 'orphaned_data':
+        // Clean up vouchers/readings without valid users
+        const orphanedVouchers = await db.prepare(`
+          DELETE FROM vouchers WHERE user_id NOT IN (SELECT id FROM users)
+        `).run();
+        const orphanedReadings = await db.prepare(`
+          DELETE FROM readings WHERE user_id NOT IN (SELECT id FROM users)
+        `).run();
+        result.message = `Cleaned up ${orphanedVouchers.changes} orphaned vouchers and ${orphanedReadings.changes} orphaned readings`;
+        break;
+
+      default:
+        return c.json({ error: 'Invalid cleanup action' }, 400);
+    }
+
+    return c.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('System cleanup error:', error);
+    return c.json({ error: 'Failed to perform cleanup' }, 500);
+  }
+});
+
+// 7. DATA EXPORT
+app.get('/api/admin/export/:type', authMiddleware, superAdminMiddleware, async (c) => {
+  try {
+    const type = c.req.param('type');
+    const db = c.env.DB;
+
+    let data = [];
+    let filename = '';
+
+    switch (type) {
+      case 'users':
+        const users = await db.prepare(`
+          SELECT u.*, t.name as tenant_name, tu.role
+          FROM users u
+          LEFT JOIN tenant_users tu ON u.id = tu.user_id
+          LEFT JOIN tenants t ON tu.tenant_id = t.id
+          ORDER BY u.created_at DESC
+        `).all();
+        data = users.results || [];
+        filename = `users-export-${Date.now()}.json`;
+        break;
+
+      case 'vouchers':
+        const vouchers = await db.prepare(`
+          SELECT v.*, u.email as user_email, t.name as tenant_name
+          FROM vouchers v
+          JOIN users u ON v.user_id = u.id
+          JOIN tenants t ON v.tenant_id = t.id
+          ORDER BY v.created_at DESC
+        `).all();
+        data = vouchers.results || [];
+        filename = `vouchers-export-${Date.now()}.json`;
+        break;
+
+      case 'system':
+        const systemData = await db.prepare(`
+          SELECT
+            (SELECT COUNT(*) FROM users) as total_users,
+            (SELECT COUNT(*) FROM tenants) as total_tenants,
+            (SELECT COUNT(*) FROM vouchers) as total_vouchers,
+            (SELECT COUNT(*) FROM readings) as total_readings,
+            (SELECT COALESCE(SUM(rand_amount), 0) FROM vouchers) as total_money,
+            datetime('now') as export_timestamp
+        `).first();
+        data = [systemData];
+        filename = `system-export-${Date.now()}.json`;
+        break;
+
+      default:
+        return c.json({ error: 'Invalid export type' }, 400);
+    }
+
+    c.header('Content-Type', 'application/json');
+    c.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+    return c.json({
+      exportType: type,
+      timestamp: new Date().toISOString(),
+      count: data.length,
+      data: data
+    });
+  } catch (error) {
+    console.error('Data export error:', error);
+    return c.json({ error: 'Failed to export data' }, 500);
+  }
+});
+
 // Serve static files from public directory - exclude API routes
 app.get('/css/*', serveStatic({ root: './public' }));
 app.get('/js/*', serveStatic({ root: './public' }));
 app.get('/images/*', serveStatic({ root: './public' }));
 app.get('/favicon.ico', serveStatic({ root: './public' }));
 
-// Serve HTML pages
+// Serve HTML pages (unprotected public pages only)
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.get('/login', serveStatic({ path: './public/login.html' }));
 app.get('/forgot-password', serveStatic({ path: './public/forgot-password.html' }));
 app.get('/reset-password', serveStatic({ path: './public/reset-password.html' }));
 app.get('/register', serveStatic({ path: './public/register.html' }));
-app.get('/dashboard', serveStatic({ path: './public/dashboard.html' }));
-app.get('/voucher', serveStatic({ path: './public/voucher.html' }));
-app.get('/reading', serveStatic({ path: './public/reading.html' }));
-app.get('/history', serveStatic({ path: './public/history.html' }));
-app.get('/settings', serveStatic({ path: './public/settings.html' }));
-app.get('/admin', serveStatic({ path: './public/admin.html' }));
 app.get('/invite', serveStatic({ path: './public/invite.html' }));
+
+// SECURITY: Block direct access to auth-required directory
+app.get('/auth-required/*', async (c) => {
+  console.log(`🚨 BLOCKED: Direct access attempt to auth-required directory from IP: ${c.req.header('CF-Connecting-IP')}`);
+  return c.redirect('/login', 302);
+});
+
+// SECURITY FALLBACK: Catch any attempts to access protected pages directly
+app.get('*', async (c) => {
+  const url = new URL(c.req.url);
+  const path = url.pathname;
+
+  console.log(`🔍 FALLBACK ROUTE HIT: ${path} from IP: ${c.req.header('CF-Connecting-IP')}`);
+
+  // If someone tries to access protected HTML files directly, redirect to login
+  const protectedPages = ['/admin.html', '/dashboard.html', '/history.html', '/voucher.html', '/reading.html', '/settings.html'];
+  const protectedPaths = ['/auth-required/'];
+
+  if (protectedPages.includes(path) || protectedPaths.some(p => path.startsWith(p))) {
+    console.log(`🚨 DIRECT ACCESS ATTEMPT to protected content: ${path} - BLOCKED`);
+    return c.redirect('/login', 302);
+  }
+
+  // For any other unmatched routes, return 404
+  return c.text('Not Found', 404);
+});
 
 export default app;

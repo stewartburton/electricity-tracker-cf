@@ -263,9 +263,18 @@
 
             try {
                 const response = await window.ElectricityTracker.api.get('/api/account/profile');
-                if (response?.tenant?.role === 'admin') {
+                if (response?.tenant?.role === 'admin' || response?.tenant?.role === 'super_admin') {
                     const navLinks = document.getElementById('navLinks');
                     if (navLinks) {
+                        // For super admins, hide voucher and reading links
+                        if (response.tenant.role === 'super_admin') {
+                            const voucherLink = navLinks.querySelector('a[href="/voucher"]');
+                            const readingLink = navLinks.querySelector('a[href="/reading"]');
+
+                            if (voucherLink) voucherLink.style.display = 'none';
+                            if (readingLink) readingLink.style.display = 'none';
+                        }
+
                         // Check if admin link already exists
                         const existingAdminLink = navLinks.querySelector('a[href="/admin"]');
                         if (!existingAdminLink) {
