@@ -75,15 +75,25 @@
                     return null;
                 }
 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    console.error('Failed to parse response:', parseError);
+                    throw new Error('Server returned invalid response');
+                }
 
                 if (!response.ok) {
-                    throw new Error(data.error || 'Request failed');
+                    throw new Error(data.error || `Request failed with status ${response.status}`);
                 }
 
                 return data;
             } catch (error) {
                 console.error('API Error:', error);
+                // Ensure error has a message property
+                if (!error.message) {
+                    error.message = 'Network error or server unavailable';
+                }
                 throw error;
             }
         },
